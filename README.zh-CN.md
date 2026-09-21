@@ -41,7 +41,7 @@ export all_proxy=socks5://127.0.0.1:7890
 ./gradlew clean test build --no-daemon
 ```
 
-产物是 `build/libs/folia-carpet-1.4.194-folia.1.jar`。
+产物是 `build/libs/folia-carpet-1.4.194-folia.2.jar`。
 
 重复构建时可以设置 `FOLIA_SOURCE_DIR` 指向已有 Folia 源码目录；如果已有兼容的开发/重映射 Folia server jar，可以用 `FOLIA_SERVER_JAR` 指定它。
 

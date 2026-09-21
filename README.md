@@ -41,7 +41,7 @@ export all_proxy=socks5://127.0.0.1:7890
 ./gradlew clean test build --no-daemon
 ```
 
-The output is `build/libs/folia-carpet-1.4.194-folia.1.jar`.
+The output is `build/libs/folia-carpet-1.4.194-folia.2.jar`.
 
 Set `FOLIA_SOURCE_DIR` to an existing checkout when building repeatedly. Set `FOLIA_SERVER_JAR` to a compatible development/remapped Folia server jar when using a prebuilt classpath.
 

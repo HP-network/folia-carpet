@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'carpet.folia'
-version = '1.4.194-folia.1'
+version = '1.4.194-folia.2'
 
 def foliaServerJar = file(System.getenv('FOLIA_SERVER_JAR') ?: 'libs/folia-server-dev-1.21.11.jar')
 if (!foliaServerJar.isFile()) {
