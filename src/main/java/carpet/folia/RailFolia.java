@@ -46,7 +46,7 @@ public final class RailFolia implements Listener
 
     private final Plugin plugin;
 
-    RailFolia(Plugin plugin)
+    public RailFolia(Plugin plugin)
     {
         this.plugin = plugin;
     }

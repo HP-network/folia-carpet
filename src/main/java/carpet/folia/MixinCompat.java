@@ -71,7 +71,7 @@ public final class MixinCompat
     public static int server_getTickCount(MinecraftServer server)
     {
 
-        return CarpetFoliaPlugin.getTick();
+        return FoliaRuntime.tick();
     }
 
     public static LevelStorageSource.LevelStorageAccess server_storageSource(MinecraftServer server)
@@ -164,7 +164,7 @@ public final class MixinCompat
         {
             return;
         }
-        org.bukkit.plugin.Plugin plugin = carpet.folia.CarpetFoliaPlugin.get();
+        org.bukkit.plugin.Plugin plugin = FoliaRuntime.plugin();
         for (ServerPlayer player : server.getPlayerList().getPlayers())
         {
             EntityPlayerActionPack actionPack = PLAYER_ACTION_PACKS.get(player);

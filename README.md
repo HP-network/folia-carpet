@@ -1,62 +1,95 @@
 # FoliaCarpet
 
-FoliaCarpet is an independent Paper-style plugin port of the Carpet 1.4.194 server feature set for **Folia 1.21.11**. It keeps Carpet's rule registry, `/carpet` settings workflow, command modules, loggers, profiler, fake-player/action-pack support, and Scarpet runtime, while routing the Folia-facing work through region and global schedulers.
+Carpet utilities and Scarpet scripting for Folia 1.21.11. FoliaCarpet brings Carpet rules, technical-server commands, fake players, logging, profiling and the Scarpet runtime to a Folia server.
 
-This repository is not a GitHub fork. It keeps the upstream Carpet MIT license and attribution.
+## Installation
 
-## Status
+1. Download the latest `folia-carpet` jar from [Releases](https://github.com/HP-network/folia-carpet/releases).
+2. Put the jar in the server's `plugins` directory.
+3. Start or restart the server.
+4. Run `/carpet list` in the console or as an operator to check the available rules.
 
-The project contains the complete Carpet 1.4.194 Java/runtime source tree and the Folia adapter used by the plugin. The plugin starts on a stock Folia 1.21.11 server and enables the Folia-safe implementation paths.
+FoliaCarpet is a Folia plugin. It is not intended for a regular Paper or Spigot server.
 
-Minecraft internals that Carpet implements exclusively through Fabric Mixin cannot be made active by a normal Bukkit plugin after Folia has loaded its server classes. Those paths remain in the source tree for parity and API compatibility, but require a patched Folia server build. They are not advertised as active in the stock-plugin mode.
+## Usage
 
-## Included
+Carpet rules are changed with `/carpet`:
 
-- Carpet rule metadata, validation, persistence, language lookup, and interactive `/carpet` commands.
-- Carpet commands including `/counter`, `/distance`, `/draw`, `/info`, `/log`, `/mobai`, `/perimeterinfo`, `/player`, `/profile`, `/spawn`, `/script`, and the test command where the server API permits them.
-- Scarpet parser, evaluator, standard APIs, app store support, event runtime, shapes, and bundled scripts.
-- Carpet logging/HUD helpers, counters, profiling hooks, fake players, and action packs.
-- Folia region-safe adapters for TNT handling, movable block entities, persistent parrots, stackable shulker boxes, rail power limits, chunk tracking, and server lifecycle events.
-- English and Simplified Chinese language resources from Carpet, with the normal Carpet language rule preserved.
+```text
+/carpet list
+/carpet <rule>
+/carpet <rule> <value>
+```
+
+Examples:
+
+```text
+/carpet commandPlayer true
+/carpet hopperCounters true
+/carpet language zh_cn
+```
+
+Rule values are saved in the world's `carpet.conf` file. A rule can be reset with its default value shown by `/carpet <rule>`.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `/carpet` | List and change Carpet rules. |
+| `/counter` | View and reset hopper counters. |
+| `/distance` | Measure the distance between positions. |
+| `/draw` | Draw spheres, balls, diamonds, pyramids, cones, cylinders and cuboids. |
+| `/info` | Inspect block information. |
+| `/log` | Enable, configure and stop Carpet loggers. |
+| `/mobai` | Inspect and track mob AI goals. |
+| `/perimeterinfo` | Inspect spawnable spaces around a position. |
+| `/player` | Spawn and control fake players and action packs. |
+| `/profile` | Profile server health and entities. |
+| `/script` | Run and manage Scarpet scripts. |
+| `/spawn` | Inspect spawn attempts, mob caps and spawn rates. |
+| `/track` | Track mob AI goals. |
+
+Some commands are enabled or restricted by their corresponding Carpet rule. Use `/carpet list command` to see the command rules on the server.
+
+## Rules
+
+Rules are grouped into `COMMAND`, `CREATIVE`, `FEATURE`, `SURVIVAL`, `TNT`, `SCARPET`, `OPTIMIZATION`, `BUGFIX` and `EXPERIMENTAL`. Common examples include:
+
+- `commandPlayer`, `commandScript`, `commandLog` and `commandDraw`
+- `hopperCounters`, `persistentParrots` and `renewableCoral`
+- `mergeTNT`, `optimizedTNT` and `tntDoNotUpdate`
+- `movableBlockEntities`, `shulkerBoxStackSize` and `railPowerLimit`
+- `creativeNoClip`, `antiCheatDisabled` and `lagFreeSpawning`
+
+Run `/carpet list <category>` or `/carpet <rule>` for the exact value, description and allowed options for a rule.
+
+## Permissions
+
+FoliaCarpet follows Minecraft operator permission levels. The default command rule is `ops`. Administrators can change command access with the relevant `command...` rule, for example:
+
+```text
+/carpet commandLog true
+/carpet commandPlayer 2
+/carpet commandScriptACE 4
+```
+
+Only an operator with the required level can raise or lower a command's permission level. Fake-player commands also require `allowSpawningOfflinePlayers` when an offline profile is used.
+
+## Language
+
+The default language is English. Switch the server language with:
+
+```text
+/carpet language zh_cn
+```
+
+Available language packs include English, Simplified Chinese, Traditional Chinese, French, Spanish (Argentina) and Portuguese (Brazil).
 
 ## Requirements
 
-- Folia 1.21.11 (Paper is not supported by this build).
-- Java 21.
-
-The version is intentionally pinned. Do not install this jar on another Minecraft/Folia version without rebuilding and testing against that server version.
-
-## Build
-
-The NMS compile classpath is generated from a pinned Folia source commit. The server jar is a local build dependency and is not committed to Git.
-
-The script respects the proxy environment already configured on the machine. In a restricted network, export the proxy variables shown below before running it; CI uses its normal direct network connection.
-
-```sh
-export https_proxy=http://127.0.0.1:7890
-export http_proxy=http://127.0.0.1:7890
-export all_proxy=socks5://127.0.0.1:7890
-
-./scripts/fetch-folia-server.sh
-./gradlew clean test build --no-daemon
-```
-
-The output is `build/libs/folia-carpet-1.4.194-folia.2.jar`.
-
-Set `FOLIA_SOURCE_DIR` to an existing checkout when building repeatedly. Set `FOLIA_SERVER_JAR` to a compatible development/remapped Folia server jar when using a prebuilt classpath.
-
-## Install
-
-1. Build the jar with the commands above.
-2. Put the jar in the Folia server's `plugins` directory.
-3. Restart the server and configure rules with `/carpet`.
-
-Back up worlds before enabling experimental rules. Folia region ownership means a rule that is safe on a single-threaded server can still need a region-aware implementation.
-
-## Verification
-
-The repository CI runs the Java 21 build after generating the pinned Folia development jar. Local smoke testing was performed on a clean Folia 1.21.11 server: the plugin was discovered as a Folia-supported Paper plugin, enabled, loaded a new world, and shut down without plugin exceptions.
+- Folia 1.21.11
+- Java 21
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md) for attribution.
+MIT. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

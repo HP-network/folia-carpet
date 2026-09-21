@@ -43,7 +43,7 @@ public final class ParrotFolia implements Listener
         }
     }
 
-    ParrotFolia()
+    public ParrotFolia()
     {
     }
 

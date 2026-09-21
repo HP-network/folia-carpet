@@ -1,6 +1,7 @@
 name: FoliaCarpet
 version: '1.4.194-folia.2'
 main: carpet.folia.CarpetFoliaPlugin
+bootstrapper: carpet.folia.CarpetFoliaBootstrap
 api-version: '1.21.11'
 folia-supported: true
 description: Carpet functionality port for Folia 1.21.11

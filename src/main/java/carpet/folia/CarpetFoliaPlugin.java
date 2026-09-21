@@ -28,11 +28,9 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
 
     private static CarpetFoliaPlugin instance;
 
-    private static volatile int tickCounter;
-
     public static int getTick()
     {
-        return tickCounter;
+        return FoliaRuntime.tick();
     }
 
     private final AtomicReference<ServerPlayer> lastQuitPlayer = new AtomicReference<>();
@@ -41,9 +39,15 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
     @Override
     public void onLoad() {
         instance = this;
+        FoliaRuntime.bind(this);
         PlatformCompat.init(this);
         CarpetServer.onGameStarted();
-        getLogger().info("Carpet Folia initialized");
+        getLogger().info("Carpet Folia initialized (mixins: "
+                + CarpetMixinBridge.transformedClasses() + " transformed, "
+                + CarpetMixinBridge.failedTransformations() + " failed, "
+                + CarpetMixinBridge.serverClassInvocations() + "/"
+                + CarpetMixinBridge.transformerInvocations() + " server classes seen; configs: "
+                + CarpetMixinBridge.mixinSummary() + ")");
     }
 
     @Override
@@ -69,7 +73,7 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
             Bukkit.getGlobalRegionScheduler().run(this, task -> CarpetServer.onServerLoadedWorlds(server));
 
             Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
-                tickCounter++;
+                FoliaRuntime.advanceTick();
                 try
                 {
                     CarpetServer.tick(server);
@@ -147,7 +151,6 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
             getLogger().info("Carpet Folia enabled");
         } catch (Throwable t) {
             getLogger().severe("Failed to enable FoliaCarpet: " + t);
-            t.printStackTrace();
             Bukkit.getPluginManager().disablePlugin(this);
         }
     }

@@ -10,8 +10,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,7 +17,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_BREAK_BLOCK;
 import static carpet.script.CarpetEventServer.Event.PLAYER_INTERACTS_WITH_BLOCK;
@@ -37,13 +34,14 @@ public class ServerPlayerGameMode_scarpetEventsMixin implements ServerPlayerInte
 
     @Shadow public ServerLevel level;
 
-    @Inject(method = "destroyBlock", locals = LocalCapture.CAPTURE_FAILHARD, cancellable = true, at = @At(
+    @Inject(method = "destroyBlock", cancellable = true, at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;removeBlock(Lnet/minecraft/core/BlockPos;Z)Z",
             shift = At.Shift.BEFORE
     ))
-    private void onBlockBroken(final BlockPos blockPos, final CallbackInfoReturnable<Boolean> cir, final BlockEntity blockEntity, final Block block, final BlockState blockState)
+    private void onBlockBroken(final BlockPos blockPos, final CallbackInfoReturnable<Boolean> cir)
     {
+        BlockState blockState = this.level.getBlockState(blockPos);
         if(PLAYER_BREAK_BLOCK.onBlockBroken(player, blockPos, blockState)) {
             this.level.sendBlockUpdated(blockPos, blockState, blockState, 3);
             cir.setReturnValue(false);

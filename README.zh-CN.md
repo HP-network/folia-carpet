@@ -1,62 +1,95 @@
 # FoliaCarpet
 
-FoliaCarpet 是面向 **Folia 1.21.11** 的独立 Paper 风格插件，迁移 Carpet 1.4.194 的服务端功能。项目保留 Carpet 的规则注册、`/carpet` 设置流程、命令模块、日志器、性能分析、假人/动作包和 Scarpet 运行时，并将 Folia 侧操作接入区域调度器与全局调度器。
-
-本仓库不是 GitHub fork，保留上游 Carpet 的 MIT 许可证和版权归属。
-
-## 当前状态
-
-仓库包含完整的 Carpet 1.4.194 Java/运行时源码树，以及插件使用的 Folia 适配层。插件可以在原版 Folia 1.21.11 上被识别、加载和启用，并使用 Folia 安全路径运行。
-
-Carpet 中有一部分功能完全依赖 Fabric Mixin 修改 Minecraft 内部类。普通 Bukkit 插件必须等 Folia 加载完服务端类之后才进入生命周期，因此无法在 stock 插件模式下凭空启用这些 Mixin 路径。相关源码仍保留，用于规则/API 对齐；要让这些路径生效，需要使用打过补丁的 Folia 服务端。文档不会把它们伪装成 stock 插件已经启用。
-
-## 已包含
-
-- Carpet 规则元数据、校验、持久化、语言查找和交互式 `/carpet` 命令。
-- `/counter`、`/distance`、`/draw`、`/info`、`/log`、`/mobai`、`/perimeterinfo`、`/player`、`/profile`、`/spawn`、`/script` 以及服务器 API 允许的测试命令。
-- Scarpet 解析器、求值器、标准 API、应用商店支持、事件运行时、形状系统和内置脚本。
-- Carpet 日志/HUD 辅助类、计数器、性能分析钩子、假人和动作包。
-- TNT、可移动方块实体、持久鹦鹉、可堆叠潜影盒、铁轨功率上限、区块跟踪及服务器生命周期的 Folia 区域安全适配。
-- Carpet 原有英文和简体中文语言资源，并保留标准 Carpet 语言规则。
-
-## 环境要求
-
-- Folia 1.21.11（此构建不支持普通 Paper）。
-- Java 21。
-
-版本被刻意锁定。不要把 jar 直接安装到其他 Minecraft/Folia 版本；应先针对对应版本重新构建并测试。
-
-## 构建
-
-NMS 编译类路径由固定的 Folia 源码 commit 生成。服务端开发 jar 只作为本地构建依赖，不提交到 Git。
-
-脚本会沿用机器上已有的代理环境。网络受限时，请在运行前导出下面的代理变量；CI 使用自身的直连网络。
-
-```sh
-export https_proxy=http://127.0.0.1:7890
-export http_proxy=http://127.0.0.1:7890
-export all_proxy=socks5://127.0.0.1:7890
-
-./scripts/fetch-folia-server.sh
-./gradlew clean test build --no-daemon
-```
-
-产物是 `build/libs/folia-carpet-1.4.194-folia.2.jar`。
-
-重复构建时可以设置 `FOLIA_SOURCE_DIR` 指向已有 Folia 源码目录；如果已有兼容的开发/重映射 Folia server jar，可以用 `FOLIA_SERVER_JAR` 指定它。
+面向 Folia 1.21.11 的 Carpet 工具和 Scarpet 脚本插件，提供 Carpet 规则、技术服命令、假人、日志、性能分析和 Scarpet 运行时。
 
 ## 安装
 
-1. 按上面的命令构建 jar。
-2. 把 jar 放进 Folia 服务端的 `plugins` 目录。
-3. 重启服务端，用 `/carpet` 配置规则。
+1. 从 [Releases](https://github.com/HP-network/folia-carpet/releases) 下载最新的 `folia-carpet` jar。
+2. 将 jar 放入服务端的 `plugins` 目录。
+3. 启动或重启服务端。
+4. 在控制台或管理员账号中执行 `/carpet list` 查看规则。
 
-启用实验性规则前先备份世界。Folia 的区域所有权意味着单线程服务端安全的规则，仍可能需要区域线程专用实现。
+FoliaCarpet 是 Folia 插件，不适用于普通 Paper 或 Spigot 服务端。
 
-## 验证
+## 使用方法
 
-仓库 CI 会先生成固定版本的 Folia 开发 jar，再用 Java 21 执行构建。本地已在干净的 Folia 1.21.11 服务端进行启动烟测：插件被识别为 Folia 支持的 Paper 插件，成功启用、创建新世界并正常关闭，没有出现插件异常。
+使用 `/carpet` 查看和修改 Carpet 规则：
+
+```text
+/carpet list
+/carpet <规则>
+/carpet <规则> <值>
+```
+
+示例：
+
+```text
+/carpet commandPlayer true
+/carpet hopperCounters true
+/carpet language zh_cn
+```
+
+规则会保存到世界目录中的 `carpet.conf`。执行 `/carpet <规则>` 可以查看当前值、默认值和可用选项。
+
+## 命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `/carpet` | 查看和修改 Carpet 规则。 |
+| `/counter` | 查看和重置漏斗计数器。 |
+| `/distance` | 测量位置之间的距离。 |
+| `/draw` | 绘制球体、圆球、菱形、金字塔、圆锥、圆柱和长方体。 |
+| `/info` | 查看方块信息。 |
+| `/log` | 启用、配置和停止 Carpet 日志器。 |
+| `/mobai` | 查看和跟踪生物 AI 目标。 |
+| `/perimeterinfo` | 检查位置周围可刷怪区域。 |
+| `/player` | 生成和控制假人及动作包。 |
+| `/profile` | 分析服务端状态和实体。 |
+| `/script` | 运行和管理 Scarpet 脚本。 |
+| `/spawn` | 查看刷怪尝试、怪物上限和刷怪率。 |
+| `/track` | 跟踪生物 AI 目标。 |
+
+部分命令会受对应的 Carpet 规则控制。执行 `/carpet list command` 可以查看当前的命令规则。
+
+## 规则配置
+
+规则分为 `COMMAND`、`CREATIVE`、`FEATURE`、`SURVIVAL`、`TNT`、`SCARPET`、`OPTIMIZATION`、`BUGFIX` 和 `EXPERIMENTAL`。常用示例：
+
+- `commandPlayer`、`commandScript`、`commandLog`、`commandDraw`
+- `hopperCounters`、`persistentParrots`、`renewableCoral`
+- `mergeTNT`、`optimizedTNT`、`tntDoNotUpdate`
+- `movableBlockEntities`、`shulkerBoxStackSize`、`railPowerLimit`
+- `creativeNoClip`、`antiCheatDisabled`、`lagFreeSpawning`
+
+执行 `/carpet list <分类>` 或 `/carpet <规则>` 查看准确的说明、当前值和可用选项。
+
+## 权限
+
+FoliaCarpet 使用 Minecraft 的管理员权限等级。命令规则默认值为 `ops`。管理员可以通过对应的 `command...` 规则调整命令权限，例如：
+
+```text
+/carpet commandLog true
+/carpet commandPlayer 2
+/carpet commandScriptACE 4
+```
+
+只有达到要求等级的管理员才能修改命令权限。使用离线玩家档案生成假人时，还需要启用 `allowSpawningOfflinePlayers`。
+
+## 语言
+
+默认语言为英语。切换为简体中文：
+
+```text
+/carpet language zh_cn
+```
+
+可用语言包括英语、简体中文、繁体中文、法语、阿根廷西班牙语和巴西葡萄牙语。
+
+## 环境要求
+
+- Folia 1.21.11
+- Java 21
 
 ## 许可证
 
-MIT，见 [`LICENSE`](LICENSE) 和 [`NOTICE.md`](NOTICE.md) 中的版权归属。
+MIT，见 [LICENSE](LICENSE) 和 [NOTICE.md](NOTICE.md)。

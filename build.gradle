@@ -48,6 +48,12 @@ dependencies {
     compileOnly 'com.mojang:datafixerupper:9.0.19'
     compileOnly 'io.netty:netty-transport:4.2.7.Final'
     compileOnly 'io.netty:netty-codec:4.2.7.Final'
+    compileOnly 'org.ow2.asm:asm:9.8'
+    compileOnly 'org.ow2.asm:asm-tree:9.8'
+    implementation 'org.ow2.asm:asm:9.8'
+    implementation 'org.ow2.asm:asm-tree:9.8'
+    implementation 'org.ow2.asm:asm-util:9.8'
+    implementation 'org.ow2.asm:asm-commons:9.8'
 
     implementation('org.spongepowered:mixin:0.8.7') {
         exclude group: 'org.spongepowered', module: 'mixin-ap'
@@ -59,6 +65,10 @@ dependencies {
     }
     implementation 'io.github.llamalad7:mixinextras-common:0.4.1'
     shade 'io.github.llamalad7:mixinextras-common:0.4.1'
+    shade 'org.ow2.asm:asm:9.8'
+    shade 'org.ow2.asm:asm-tree:9.8'
+    shade 'org.ow2.asm:asm-util:9.8'
+    shade 'org.ow2.asm:asm-commons:9.8'
 }
 
 processResources {
@@ -73,6 +83,9 @@ jar {
             'Implementation-Title': project.name,
             'Implementation-Version': project.version,
             'MixinConfigs': 'carpet.mixins.json',
+            'Agent-Class': 'carpet.folia.FoliaCarpetAgent',
+            'Can-Redefine-Classes': 'true',
+            'Can-Retransform-Classes': 'true',
         )
     }
 }
@@ -82,7 +95,62 @@ shadowJar {
     archiveBaseName.set('folia-carpet')
     archiveVersion.set(project.version.toString())
     configurations = [project.configurations.shade]
+    mergeServiceFiles()
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    // Mixin must be loaded once by the server loader. Keeping another copy in
+    // Paper's child-first plugin loader causes IllegalAccessError for package
+    // private Mixin and MixinExtras implementation classes.
+    exclude 'org/spongepowered/**'
+    exclude 'com/llamalad7/mixinextras/**'
+    exclude 'org/objectweb/asm/**'
+    exclude 'META-INF/services/**'
+    exclude 'carpet/folia/MixinServiceFolia.class'
+}
+
+def isSupportEntry = { String name ->
+    if (name.startsWith('carpet/')) {
+        return !(name.startsWith('carpet/folia/CarpetFolia')
+                || name.startsWith('carpet/folia/FoliaCarpet')
+                || name.startsWith('carpet/folia/MixinInstrumentation')
+                || name.startsWith('carpet/folia/CarpetMixin'))
+    }
+    return name.startsWith('assets/carpet/')
+            || name == 'carpet.mixins.json'
+            || name.endsWith('.refmap.json')
+            || name.startsWith('com/llamalad7/mixinextras/')
+            || name.startsWith('org/spongepowered/asm/')
+            || name.startsWith('org/objectweb/asm/')
+            || name.startsWith('META-INF/services/')
+}
+
+def supportJar = tasks.register('supportJar', Jar) {
+    archiveFileName = 'folia-carpet-support.jar'
+    destinationDirectory = layout.buildDirectory.dir('support')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(sourceSets.main.output) {
+        exclude 'carpet/folia/CarpetFolia*.class'
+        exclude 'carpet/folia/FoliaCarpet*.class'
+        exclude 'carpet/folia/MixinInstrumentationTransformer.class'
+        exclude 'carpet/folia/CarpetMixin*.class'
+    }
+    from(configurations.shade.collect { zipTree(it) }) {
+        include 'com/llamalad7/mixinextras/**'
+        include 'org/spongepowered/asm/**'
+        include 'org/objectweb/asm/**'
+        exclude 'META-INF/services/**'
+    }
+    from('src/main/resources/folia-support-services') {
+        into('META-INF/services')
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}
+
+tasks.named('shadowJar').configure {
+    dependsOn(supportJar)
+    from(supportJar) {
+        into('META-INF/folia-carpet')
+        rename { 'folia-carpet-support.jar' }
+    }
 }
 
 build.dependsOn shadowJar

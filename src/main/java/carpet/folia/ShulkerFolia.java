@@ -29,7 +29,7 @@ public final class ShulkerFolia implements Listener
 {
     private static final int SCAN_INTERVAL = 40;
 
-    ShulkerFolia()
+    public ShulkerFolia()
     {
     }
 

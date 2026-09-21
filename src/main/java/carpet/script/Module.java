@@ -47,11 +47,15 @@ public record Module(String name, String code, boolean library)
 
     public static Module fromJarPathWithCustomName(String fullPath, String customName, boolean isLibrary)
     {
-        try
+        try (var stream = Module.class.getClassLoader().getResourceAsStream(fullPath))
         {
+            if (stream == null)
+            {
+                throw new IllegalArgumentException("Bundled module is missing: " + fullPath);
+            }
             String name = customName.toLowerCase(Locale.ROOT);
             String code = IOUtils.toString(
-                    Module.class.getClassLoader().getResourceAsStream(fullPath),
+                    stream,
                     StandardCharsets.UTF_8
             );
             return new Module(name, code, isLibrary);

@@ -8,6 +8,7 @@ libs/
 
 # Local test server
 run/
+run*/
 eula.txt
 session.lock
 
