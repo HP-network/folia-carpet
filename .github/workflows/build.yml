@@ -19,4 +19,5 @@ jobs:
           java-version: '21'
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew test build
+      - run: ./scripts/fetch-folia-server.sh
+      - run: ./gradlew clean test build --no-daemon

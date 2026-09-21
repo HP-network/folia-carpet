@@ -1,6 +1,0 @@
-language: zh-CN
-rules:
-  entity-spawn-cap: 64
-  redstone-events-per-second: 250
-  max-view-distance: 10
-  max-simulation-distance: 8

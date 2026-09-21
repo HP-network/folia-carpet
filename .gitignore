@@ -1,6 +1,18 @@
+# Gradle
 .gradle/
 build/
 out/
+
+# Local Folia server dependency (downloaded by scripts/fetch-folia-server.sh)
+libs/
+
+# Local test server
 run/
+eula.txt
+session.lock
+
+# IDE and OS files
 *.iml
 .idea/
+.DS_Store
+Thumbs.db
