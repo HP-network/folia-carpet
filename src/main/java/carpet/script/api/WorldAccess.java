@@ -27,6 +27,7 @@ import carpet.script.value.NumericValue;
 import carpet.script.value.StringValue;
 import carpet.script.value.Value;
 import carpet.script.value.ValueConversions;
+import carpet.folia.FoliaRuntime;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -1075,11 +1076,14 @@ public class WorldAccess
             };
             int i = serverExplosion.explode();
             ParticleOptions particleOptions3 = serverExplosion.isSmall() ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
+            final float explosionPower = powah;
 
             for (ServerPlayer serverPlayer : cc.level().players()) {
                 if (serverPlayer.distanceToSqr(pos) < 4096.0) {
                     Optional<Vec3> optional = Optional.ofNullable((Vec3)serverExplosion.getHitPlayers().get(serverPlayer));
-                    serverPlayer.connection.send(new ClientboundExplodePacket(pos, powah, i, optional, particleOptions3, SoundEvents.GENERIC_EXPLODE, DEFAULT_EXPLOSION_BLOCK_PARTICLES));
+                    FoliaRuntime.runOnPlayer(serverPlayer, target -> target.connection.send(
+                            new ClientboundExplodePacket(pos, explosionPower, i, optional, particleOptions3,
+                                    SoundEvents.GENERIC_EXPLODE, DEFAULT_EXPLOSION_BLOCK_PARTICLES)));
                 }
             }
             return Value.TRUE;

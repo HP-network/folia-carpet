@@ -8,6 +8,7 @@ import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
@@ -40,16 +41,17 @@ import net.minecraft.world.phys.Vec3;
 import carpet.folia.MixinCompat;
 import carpet.utils.Messenger;
 
-import java.util.HashSet;
 import java.util.Optional;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("EntityConstructor")
 public class EntityPlayerMPFake extends ServerPlayer
 {
-    private static final Set<String> spawning = new HashSet<>();
+    private static final Set<String> spawning = ConcurrentHashMap.newKeySet();
     private int fakeTickCounter;
 
     public Runnable fixStartingPosition = () -> {};
@@ -58,7 +60,11 @@ public class EntityPlayerMPFake extends ServerPlayer
     public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
     {
 
-        ServerLevel worldIn = server.getLevel(dimensionId);
+        ServerLevel worldIn = server == null ? null : server.getLevel(dimensionId);
+        if (worldIn == null || worldIn.getWorld() == null)
+        {
+            return false;
+        }
         server.services().nameToIdCache().resolveOfflineUsers(false);
         GameProfile gameprofile;
 
@@ -95,22 +101,30 @@ public class EntityPlayerMPFake extends ServerPlayer
         {
             finalProfile = gameprofile;
         }
-        spawning.remove(name);
-
         try
         {
             net.minecraft.world.level.ChunkPos cpos = new net.minecraft.world.level.ChunkPos(
                     net.minecraft.core.BlockPos.containing(pos));
-            org.bukkit.plugin.Plugin plugin = carpet.folia.CarpetFoliaPlugin.get();
+            org.bukkit.plugin.Plugin plugin = carpet.folia.FoliaRuntime.plugin();
             org.bukkit.Bukkit.getRegionScheduler().execute(
                     plugin,
                     worldIn.getWorld(),
                     cpos.x, cpos.z,
-                    () -> spawnFake(server, worldIn, finalProfile, pos, yaw, pitch, dimensionId, gamemode, flying)
+                    () -> {
+                        try
+                        {
+                            spawnFake(server, worldIn, finalProfile, pos, yaw, pitch, dimensionId, gamemode, flying);
+                        }
+                        finally
+                        {
+                            spawning.remove(name);
+                        }
+                    }
             );
         }
         catch (Throwable e)
         {
+            spawning.remove(name);
             CarpetSettings.LOG.error("[FoliaCarpet] Failed to schedule fake player " + name, e);
         }
         return true;
@@ -134,8 +148,9 @@ public class EntityPlayerMPFake extends ServerPlayer
         instance.unsetRemoved();
         instance.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
         instance.gameMode.changeGameModeForPlayer(gamemode);
-        server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);
-        server.getPlayerList().broadcastAll(ClientboundEntityPositionSyncPacket.of(instance), dimensionId);
+        broadcastToDimension(server, dimensionId,
+                new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)));
+        broadcastToDimension(server, dimensionId, ClientboundEntityPositionSyncPacket.of(instance));
 
         instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f);
         instance.getAbilities().flying = flying;
@@ -224,8 +239,10 @@ public class EntityPlayerMPFake extends ServerPlayer
         playerShadow.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
         playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
 
-        server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(playerShadow, (byte) (player.yHeadRot * 256 / 360)), playerShadow.level().dimension());
-        server.getPlayerList().broadcastAll(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, playerShadow));
+        broadcastToDimension(server, playerShadow.level().dimension(),
+                new ClientboundRotateHeadPacket(playerShadow, (byte) (player.yHeadRot * 256 / 360)));
+        broadcastToAll(server, new ClientboundPlayerInfoUpdatePacket(
+                ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, playerShadow));
 
         playerShadow.getAbilities().flying = player.getAbilities().flying;
         return playerShadow;
@@ -234,6 +251,25 @@ public class EntityPlayerMPFake extends ServerPlayer
     public static EntityPlayerMPFake respawnFake(MinecraftServer server, ServerLevel level, GameProfile profile, ClientInformation cli)
     {
         return new EntityPlayerMPFake(server, level, profile, cli, false);
+    }
+
+    private static void broadcastToDimension(MinecraftServer server, ResourceKey<Level> dimension, Packet<?> packet)
+    {
+        for (ServerPlayer recipient : new ArrayList<>(server.getPlayerList().getPlayers()))
+        {
+            if (dimension.equals(recipient.level().dimension()))
+            {
+                carpet.folia.FoliaRuntime.runOnPlayer(recipient, target -> target.connection.send(packet));
+            }
+        }
+    }
+
+    private static void broadcastToAll(MinecraftServer server, Packet<?> packet)
+    {
+        for (ServerPlayer recipient : new ArrayList<>(server.getPlayerList().getPlayers()))
+        {
+            carpet.folia.FoliaRuntime.runOnPlayer(recipient, target -> target.connection.send(packet));
+        }
     }
 
     public static boolean isSpawningPlayer(String username)
@@ -269,18 +305,9 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         shakeOff();
 
-        if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(this.level(), this.blockPosition()))
-        {
-            this.connection.onDisconnect(new DisconnectionDetails(reason));
-        }
-        else
-        {
-            net.minecraft.world.level.ChunkPos cpos = new net.minecraft.world.level.ChunkPos(this.blockPosition());
-            org.bukkit.plugin.Plugin plugin = carpet.folia.CarpetFoliaPlugin.get();
-            final Component r = reason;
-            org.bukkit.Bukkit.getRegionScheduler().execute(plugin, this.level().getWorld(), cpos.x, cpos.z,
-                    () -> this.connection.onDisconnect(new DisconnectionDetails(r)));
-        }
+        final Component r = reason;
+        carpet.folia.FoliaRuntime.runOnPlayer(this,
+                target -> target.connection.onDisconnect(new DisconnectionDetails(r)));
     }
 
     @Override

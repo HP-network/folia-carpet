@@ -21,6 +21,7 @@ import carpet.script.utils.InputValidator;
 import carpet.script.utils.ScarpetJsonDeserializer;
 import carpet.script.utils.ShapeDispatcher;
 import carpet.script.utils.WorldTools;
+import carpet.folia.FoliaRuntime;
 import carpet.script.value.BooleanValue;
 import carpet.script.value.EntityValue;
 import carpet.script.value.FormattedTextValue;
@@ -164,10 +165,15 @@ public class Auxiliary
             int count = 0;
             ServerLevel level = cc.level();
             long seed = level.getRandom().nextLong();
+            final float soundVolume = volume;
+            final float soundPitch = pitch;
+            final SoundSource soundMixer = mixer;
             for (ServerPlayer player : level.getPlayers(p -> p.distanceToSqr(vec) < d0))
             {
                 count++;
-                player.connection.send(new ClientboundSoundPacket(soundHolder, mixer, vec.x, vec.y, vec.z, volume, pitch, seed));
+                FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
+                        new ClientboundSoundPacket(soundHolder, soundMixer, vec.x, vec.y, vec.z,
+                                soundVolume, soundPitch, seed)));
             }
             return new NumericValue(count);
         });
@@ -655,11 +661,13 @@ public class Auxiliary
             Packet<?> packet = packetGetter.apply(title);
             AtomicInteger total = new AtomicInteger(0);
             targets.forEach(p -> {
-                if (timesPacket != null)
-                {
-                    p.connection.send(timesPacket);
-                }
-                p.connection.send(packet);
+                FoliaRuntime.runOnPlayer(p, target -> {
+                    if (timesPacket != null)
+                    {
+                        target.connection.send(timesPacket);
+                    }
+                    target.connection.send(packet);
+                });
                 total.getAndIncrement();
             });
             return NumericValue.of(total.get());

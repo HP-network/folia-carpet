@@ -2,6 +2,7 @@ package carpet.network;
 
 import carpet.CarpetServer;
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.api.settings.CarpetRule;
 import carpet.api.settings.RuleHelper;
 import carpet.fakes.ServerGamePacketListenerImplInterface;
@@ -13,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 import net.minecraft.nbt.CompoundTag;
@@ -27,8 +29,8 @@ import net.minecraft.server.level.ServerPlayer;
 
 public class ServerNetworkHandler
 {
-    private static final Map<ServerPlayer, String> remoteCarpetPlayers = new HashMap<>();
-    private static final Set<ServerPlayer> validCarpetPlayers = new HashSet<>();
+    private static final Map<ServerPlayer, String> remoteCarpetPlayers = new ConcurrentHashMap<>();
+    private static final Set<ServerPlayer> validCarpetPlayers = ConcurrentHashMap.newKeySet();
 
     private static final Map<String, BiConsumer<ServerPlayer, Tag>> dataHandlers = Map.of(
             CarpetClient.HELLO, (p, t) -> onHello(p, t.asString().orElseThrow()),
@@ -131,7 +133,8 @@ public class ServerNetworkHandler
         }
         for (ServerPlayer player : remoteCarpetPlayers.keySet())
         {
-            player.connection.send(DataBuilder.create(player.level().getServer()).withRule(rule).build());
+            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
+                    DataBuilder.create(CarpetServer.minecraft_server).withRule(rule).build()));
         }
     }
 
@@ -143,7 +146,8 @@ public class ServerNetworkHandler
         }
         for (ServerPlayer player : validCarpetPlayers)
         {
-            player.connection.send(DataBuilder.create(player.level().getServer()).withCustomNbt(command, data).build());
+            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
+                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build()));
         }
     }
 
@@ -151,7 +155,8 @@ public class ServerNetworkHandler
     {
         if (isValidCarpetPlayer(player))
         {
-            player.connection.send(DataBuilder.create(player.level().getServer()).withCustomNbt(command, data).build());
+            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
+                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build()));
         }
     }
 

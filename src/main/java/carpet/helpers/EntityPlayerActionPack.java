@@ -1,6 +1,7 @@
 package carpet.helpers;
 
 import carpet.folia.MixinCompat;
+import carpet.folia.FoliaRuntime;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -281,7 +282,8 @@ public class EntityPlayerActionPack
     public void setSlot(int slot)
     {
         player.getInventory().setSelectedSlot(slot-1);
-        player.connection.send(new ClientboundSetHeldSlotPacket(slot-1));
+        FoliaRuntime.runOnPlayer(player,
+                target -> target.connection.send(new ClientboundSetHeldSlotPacket(slot-1)));
     }
 
     public enum ActionType

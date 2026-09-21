@@ -1,6 +1,7 @@
 package carpet.logging;
 
 import carpet.CarpetServer;
+import carpet.folia.FoliaRuntime;
 import carpet.helpers.HopperCounter;
 import carpet.logging.logHelpers.PacketCounter;
 import carpet.utils.Messenger;
@@ -20,11 +21,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 public class HUDController
 {
-    private static final List<Consumer<MinecraftServer>> HUDListeners = new ArrayList<>();
+    private static final List<Consumer<MinecraftServer>> HUDListeners = new CopyOnWriteArrayList<>();
 
     private static int hudTick = 0;
 
@@ -33,11 +36,11 @@ public class HUDController
         HUDListeners.add(listener);
     }
 
-    public static final Map<ServerPlayer, List<Component>> player_huds = new HashMap<>();
+    public static final Map<ServerPlayer, List<Component>> player_huds = new ConcurrentHashMap<>();
 
-    public static final Map<String, Component> scarpet_headers = new HashMap<>();
+    public static final Map<String, Component> scarpet_headers = new ConcurrentHashMap<>();
 
-    public static final Map<String, Component> scarpet_footers = new HashMap<>();
+    public static final Map<String, Component> scarpet_footers = new ConcurrentHashMap<>();
 
     public static void resetScarpetHUDs() {
         scarpet_headers.clear();
@@ -49,7 +52,7 @@ public class HUDController
         if (player == null) return;
         if (!player_huds.containsKey(player))
         {
-            player_huds.put(player, new ArrayList<>());
+            player_huds.putIfAbsent(player, new CopyOnWriteArrayList<>());
         }
         else
         {
@@ -60,8 +63,8 @@ public class HUDController
 
     public static void clearPlayer(ServerPlayer player)
     {
-        ClientboundTabListPacket packet = new ClientboundTabListPacket(Component.literal(""), Component.literal(""));
-        player.connection.send(packet);
+        FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
+                new ClientboundTabListPacket(Component.literal(""), Component.literal(""))));
     }
 
     public static void update_hud(MinecraftServer server, List<ServerPlayer> force)
@@ -71,7 +74,9 @@ public class HUDController
 
         player_huds.clear();
 
-        server.getPlayerList().getPlayers().forEach(p -> {
+        List<ServerPlayer> players = new ArrayList<>(server.getPlayerList().getPlayers());
+
+        players.forEach(p -> {
             Component scarpetFOoter = scarpet_footers.get(p.getScoreboardName());
             if (scarpetFOoter != null) HUDController.addMessage(p, scarpetFOoter);
         });
@@ -98,15 +103,18 @@ public class HUDController
 
         HUDListeners.forEach(l -> l.accept(server));
 
-        Set<ServerPlayer> targets = new HashSet<>(player_huds.keySet());
+        Set<ServerPlayer> targets = ConcurrentHashMap.newKeySet();
+        targets.addAll(players);
         if (force!= null) targets.addAll(force);
         for (ServerPlayer player: targets)
         {
-            ClientboundTabListPacket packet = new ClientboundTabListPacket(
-                        scarpet_headers.getOrDefault(player.getScoreboardName(), Component.literal("")),
-                        Messenger.c(player_huds.getOrDefault(player, List.of()).toArray(new Object[0]))
-                    );
-            player.connection.send(packet);
+            FoliaRuntime.runOnPlayer(player, target -> {
+                ClientboundTabListPacket packet = new ClientboundTabListPacket(
+                        scarpet_headers.getOrDefault(target.getScoreboardName(), Component.literal("")),
+                        Messenger.c(player_huds.getOrDefault(target, List.of()).toArray(new Object[0]))
+                );
+                target.connection.send(packet);
+            });
         }
     }
     private static Component [] send_tps_display(MinecraftServer server)

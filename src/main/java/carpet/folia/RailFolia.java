@@ -119,7 +119,7 @@ public final class RailFolia implements Listener
         {
             return;
         }
-        int tick = CarpetFoliaPlugin.getTick();
+        int tick = FoliaRuntime.tick();
         if (tick % POWER_SCAN_INTERVAL == 0)
         {
             powerPass(plugin, server, limitSetting - 1);

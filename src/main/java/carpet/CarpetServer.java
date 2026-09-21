@@ -22,6 +22,7 @@ import carpet.network.ServerNetworkHandler;
 import carpet.helpers.HopperCounter;
 import carpet.logging.LoggerRegistry;
 import carpet.script.CarpetScriptServer;
+import carpet.script.CarpetEventServer;
 import carpet.api.settings.SettingsManager;
 import carpet.logging.HUDController;
 import carpet.script.external.Carpet;
@@ -49,6 +50,11 @@ public class CarpetServer
     public static carpet.settings.SettingsManager settingsManager;
     public static final List<CarpetExtension> extensions = new ArrayList<>();
 
+    private static final Object LIFECYCLE_LOCK = new Object();
+    private static MinecraftServer lifecycleServer;
+    private static boolean worldsInitialized;
+    private static CommandDispatcher<CommandSourceStack> registeredDispatcher;
+
     public static void manageExtension(CarpetExtension extension)
     {
         extensions.add(extension);
@@ -73,44 +79,104 @@ public class CarpetServer
 
     public static void onServerLoaded(MinecraftServer server)
     {
-        CarpetServer.minecraft_server = server;
+        synchronized (LIFECYCLE_LOCK)
+        {
+            if (server == null || (lifecycleServer == server && scriptServer != null))
+            {
+                return;
+            }
+            lifecycleServer = server;
+            worldsInitialized = false;
+            CarpetServer.minecraft_server = server;
 
-        SpawnReporter.resetSpawnStats(server, true);
+            SpawnReporter.resetSpawnStats(server, true);
 
-        forEachManager(sm -> sm.attachServer(server));
-        extensions.forEach(e -> e.onServerLoaded(server));
-        scriptServer = new CarpetScriptServer(server);
-        Carpet.MinecraftServer_addScriptServer(server, scriptServer);
-        MobAI.resetTrackers();
-        LoggerRegistry.initLoggers();
+            forEachManager(sm -> sm.attachServer(server));
+            extensions.forEach(e -> e.onServerLoaded(server));
+            scriptServer = new CarpetScriptServer(server);
+            Carpet.MinecraftServer_addScriptServer(server, scriptServer);
+            MobAI.resetTrackers();
+            LoggerRegistry.initLoggers();
+        }
 
     }
 
     public static void onServerLoadedWorlds(MinecraftServer minecraftServer)
     {
-        HopperCounter.resetAll(minecraftServer, true);
-        extensions.forEach(e -> e.onServerLoadedWorlds(minecraftServer));
+        synchronized (LIFECYCLE_LOCK)
+        {
+            if (minecraftServer == null || minecraft_server != minecraftServer
+                    || scriptServer == null || worldsInitialized)
+            {
+                return;
+            }
+            HopperCounter.resetAll(minecraftServer, true);
+            extensions.forEach(e -> e.onServerLoadedWorlds(minecraftServer));
 
-        forEachManager(SettingsManager::initializeScarpetRules);
-        scriptServer.initializeForWorld();
+            forEachManager(SettingsManager::initializeScarpetRules);
+            scriptServer.initializeForWorld();
+            worldsInitialized = true;
+        }
+    }
+
+    public static void reloadWorlds(MinecraftServer server)
+    {
+        synchronized (LIFECYCLE_LOCK)
+        {
+            if (server == minecraft_server)
+            {
+                worldsInitialized = false;
+            }
+        }
+        onServerLoadedWorlds(server);
     }
 
     public static void tick(MinecraftServer server)
     {
-        HUDController.update_hud(server, null);
-        if (scriptServer != null) scriptServer.tick();
-
-        CarpetSettings.impendingFillSkipUpdates.set(false);
-
-        extensions.forEach(e -> e.onTick(server));
-    }
-
-    public static void registerCarpetCommands(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment, CommandBuildContext commandBuildContext)
-    {
-        if (settingsManager == null)
+        if (server == null || server != minecraft_server)
         {
             return;
         }
+        HUDController.update_hud(server, null);
+        if (scriptServer != null) scriptServer.tick();
+
+        // The global event is safe to dispatch from Folia's global scheduler.
+        // Dimension-specific events are scheduled on their own region by the
+        // Folia plugin so Scarpet callbacks can touch that world safely.
+        if (server.tickRateManager().runsNormally())
+        {
+            CarpetEventServer.Event.TICK.onTick(server);
+        }
+
+        CarpetSettings.impendingFillSkipUpdates.set(false);
+        extensions.forEach(e -> e.onTick(server));
+
+    }
+
+    public static void tickDimensionEvent(MinecraftServer server, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension)
+    {
+        if (server == null || server != minecraft_server || !server.tickRateManager().runsNormally())
+        {
+            return;
+        }
+        if (dimension == net.minecraft.world.level.Level.NETHER)
+        {
+            CarpetEventServer.Event.NETHER_TICK.onTick(server);
+        }
+        else if (dimension == net.minecraft.world.level.Level.END)
+        {
+            CarpetEventServer.Event.ENDER_TICK.onTick(server);
+        }
+
+    }
+
+    public static synchronized void registerCarpetCommands(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment, CommandBuildContext commandBuildContext)
+    {
+        if (settingsManager == null || dispatcher == null || registeredDispatcher == dispatcher)
+        {
+            return;
+        }
+        registeredDispatcher = dispatcher;
         forEachManager(sm -> sm.registerCommand(dispatcher, commandBuildContext));
 
         ProfileCommand.register(dispatcher, commandBuildContext);
@@ -139,6 +205,10 @@ public class CarpetServer
 
     public static void onPlayerLoggedIn(ServerPlayer player)
     {
+        if (player == null || scriptServer == null)
+        {
+            return;
+        }
         ServerNetworkHandler.onPlayerJoin(player);
         LoggerRegistry.playerConnected(player);
         extensions.forEach(e -> e.onPlayerLoggedIn(player));
@@ -165,13 +235,18 @@ public class CarpetServer
 
     public static void onServerClosed(@Nullable MinecraftServer server)
     {
-
-        if (minecraft_server != null)
+        synchronized (LIFECYCLE_LOCK)
         {
+            if (minecraft_server == null)
+            {
+                return;
+            }
+            MinecraftServer activeServer = minecraft_server;
             if (scriptServer != null) scriptServer.onClose();
 
-            if (server != null && !Vanilla.MinecraftServer_getScriptServer(server).stopAll) {
-                Vanilla.MinecraftServer_getScriptServer(server).onClose();
+            CarpetScriptServer externalScriptServer = server == null ? null : Vanilla.MinecraftServer_getScriptServer(server);
+            if (externalScriptServer != null && externalScriptServer != scriptServer && !externalScriptServer.stopAll) {
+                externalScriptServer.onClose();
             }
 
             scriptServer = null;
@@ -180,8 +255,15 @@ public class CarpetServer
             LoggerRegistry.stopLoggers();
             HUDController.resetScarpetHUDs();
             ParticleParser.resetCache();
-            extensions.forEach(e -> e.onServerClosed(server));
+            extensions.forEach(e -> e.onServerClosed(activeServer));
             minecraft_server = null;
+            lifecycleServer = null;
+            worldsInitialized = false;
+            registeredDispatcher = null;
+            if (server == null || server == activeServer)
+            {
+                scriptServer = null;
+            }
         }
     }
     public static void onServerDoneClosing(MinecraftServer server)

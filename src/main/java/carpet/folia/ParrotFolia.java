@@ -5,7 +5,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,11 +14,10 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.plugin.Plugin;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import carpet.CarpetSettings;
 
@@ -28,7 +26,7 @@ public final class ParrotFolia implements Listener
     private static final int PRUNE_TICKS = 20;
 
     private static Plugin plugin;
-    private static volatile Map<UUID, CompoundTag[]> shoulderSnapshot = Collections.emptyMap();
+    private static final Map<UUID, CompoundTag[]> shoulderSnapshot = new ConcurrentHashMap<>();
     private static final Map<ServerPlayer, DamageInfo> damageTicks = new ConcurrentHashMap<>();
 
     private static final class DamageInfo
@@ -52,27 +50,45 @@ public final class ParrotFolia implements Listener
         plugin = owner;
     }
 
+    public static void detach(Plugin owner)
+    {
+        if (plugin == owner)
+        {
+            plugin = null;
+            shoulderSnapshot.clear();
+            damageTicks.clear();
+        }
+    }
+
     public static void tick(MinecraftServer server)
     {
         if (server == null || !CarpetSettings.persistentParrots)
         {
             return;
         }
-        Map<UUID, CompoundTag[]> snapshot = new HashMap<>();
+        if (plugin == null)
+        {
+            return;
+        }
         for (ServerPlayer player : server.getPlayerList().getPlayers())
         {
-            CompoundTag left = player.getShoulderEntityLeft();
-            CompoundTag right = player.getShoulderEntityRight();
-            if (!left.isEmpty() || !right.isEmpty())
-            {
-                snapshot.put(player.getUUID(), new CompoundTag[]
-                        { left.isEmpty() ? null : left.copy(), right.isEmpty() ? null : right.copy() });
-            }
+            FoliaRuntime.runOnPlayer(player, target -> {
+                CompoundTag left = target.getShoulderEntityLeft();
+                CompoundTag right = target.getShoulderEntityRight();
+                if (left.isEmpty() && right.isEmpty())
+                {
+                    shoulderSnapshot.remove(target.getUUID());
+                }
+                else
+                {
+                    shoulderSnapshot.put(target.getUUID(), new CompoundTag[]
+                            { left.isEmpty() ? null : left.copy(), right.isEmpty() ? null : right.copy() });
+                }
+            });
         }
-        shoulderSnapshot = snapshot;
         if (!damageTicks.isEmpty())
         {
-            long now = CarpetFoliaPlugin.getTick();
+            long now = FoliaRuntime.tick();
             damageTicks.entrySet().removeIf(e -> now - e.getValue().tick > PRUNE_TICKS);
         }
     }
@@ -107,7 +123,7 @@ public final class ParrotFolia implements Listener
 
             UUID ownerId = null;
             boolean isLeft = false;
-            boolean isRight = false;
+            CompoundTag[] ownerTags = null;
             Map<UUID, CompoundTag[]> snapshot = shoulderSnapshot;
             for (Map.Entry<UUID, CompoundTag[]> entry : snapshot.entrySet())
             {
@@ -120,7 +136,7 @@ public final class ParrotFolia implements Listener
                 {
                     ownerId = entry.getKey();
                     isLeft = matchLeft;
-                    isRight = matchRight;
+                    ownerTags = tags;
                     break;
                 }
             }
@@ -135,31 +151,29 @@ public final class ParrotFolia implements Listener
             }
             ServerPlayer player = ((CraftPlayer) bukkitPlayer).getHandle();
 
-            DamageInfo dmg = damageTicks.get(player);
-            boolean damagePath = dmg != null && dmg.tick == Bukkit.getCurrentTick();
-
-            boolean keep;
-            if (damagePath)
-            {
-
-                keep = player.isShiftKeyDown() || !(player.getRandom().nextFloat() < dmg.damage / 15.0F);
-            }
-            else
-            {
-
-                boolean carpetRemoves = (player.getAbilities().invulnerable && player.fallDistance > 0.5F)
-                        || player.isInWater() || player.getAbilities().flying
-                        || player.isSleeping() || player.isInPowderSnow;
-                keep = !carpetRemoves;
-            }
-            if (!keep)
+            AtomicBoolean keep = new AtomicBoolean();
+            if (!FoliaRuntime.runOnPlayerAndWait(player, target -> {
+                DamageInfo dmg = damageTicks.get(target);
+                boolean damagePath = dmg != null && dmg.tick == Bukkit.getCurrentTick();
+                if (damagePath)
+                {
+                    keep.set(target.isShiftKeyDown()
+                            || !(target.getRandom().nextFloat() < dmg.damage / 15.0F));
+                }
+                else
+                {
+                    boolean carpetRemoves = (target.getAbilities().invulnerable && target.fallDistance > 0.5F)
+                            || target.isInWater() || target.getAbilities().flying
+                            || target.isSleeping() || target.isInPowderSnow;
+                    keep.set(!carpetRemoves);
+                }
+            }) || !keep.get())
             {
                 return;
             }
 
             event.setCancelled(true);
-            CompoundTag[] tags = snapshot.get(ownerId);
-            final CompoundTag restoreTag = isLeft ? tags[0] : tags[1];
+            final CompoundTag restoreTag = isLeft ? ownerTags[0] : ownerTags[1];
             scheduleRestore(event, player, isLeft, restoreTag);
         }
         catch (Throwable ignored)
@@ -173,28 +187,20 @@ public final class ParrotFolia implements Listener
         {
             return;
         }
-        World world = event.getEntity().getWorld();
-        if (world == null)
-        {
-            return;
-        }
-        int chunkX = event.getEntity().getLocation().getBlockX() >> 4;
-        int chunkZ = event.getEntity().getLocation().getBlockZ() >> 4;
-        Bukkit.getRegionScheduler().execute(plugin, world, chunkX, chunkZ, () ->
-        {
+        FoliaRuntime.runOnPlayer(owner, target -> {
             try
             {
 
                 if (left)
                 {
-                    if (owner.getShoulderEntityLeft().isEmpty())
+                    if (target.getShoulderEntityLeft().isEmpty())
                     {
-                        owner.setShoulderEntityLeft(tag);
+                        target.setShoulderEntityLeft(tag);
                     }
                 }
-                else if (owner.getShoulderEntityRight().isEmpty())
+                else if (target.getShoulderEntityRight().isEmpty())
                 {
-                    owner.setShoulderEntityRight(tag);
+                    target.setShoulderEntityRight(tag);
                 }
             }
             catch (Throwable ignored)

@@ -23,6 +23,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 import io.papermc.paper.event.player.PlayerFailMoveEvent;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
+
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
 
@@ -34,6 +38,7 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
     }
 
     private final AtomicReference<ServerPlayer> lastQuitPlayer = new AtomicReference<>();
+    private final List<ScheduledTask> dimensionTickTasks = new CopyOnWriteArrayList<>();
     private MinecraftServer server;
 
     @Override
@@ -71,6 +76,7 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
             Bukkit.getPluginManager().registerEvents(railFolia, this);
 
             Bukkit.getGlobalRegionScheduler().run(this, task -> CarpetServer.onServerLoadedWorlds(server));
+            Bukkit.getGlobalRegionScheduler().run(this, task -> scheduleDimensionTicks());
 
             Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
                 FoliaRuntime.advanceTick();
@@ -161,13 +167,58 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
         CarpetServer.registerCarpetCommands(commands.getDispatcher(), Commands.CommandSelection.DEDICATED, context);
     }
 
+    private void scheduleDimensionTicks()
+    {
+        cancelDimensionTicks();
+        for (org.bukkit.World world : Bukkit.getWorlds())
+        {
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension = switch (world.getEnvironment())
+            {
+                case NETHER -> net.minecraft.world.level.Level.NETHER;
+                case THE_END -> net.minecraft.world.level.Level.END;
+                default -> null;
+            };
+            if (dimension == null)
+            {
+                continue;
+            }
+            dimensionTickTasks.add(Bukkit.getRegionScheduler().runAtFixedRate(
+                    this, world, 0, 0,
+                    task -> {
+                        try
+                        {
+                            CarpetServer.tickDimensionEvent(server, dimension);
+                        }
+                        catch (Throwable error)
+                        {
+                            getLogger().severe("Error in Carpet dimension tick: " + error);
+                        }
+                    }, 1, 1));
+        }
+    }
+
+    private void cancelDimensionTicks()
+    {
+        for (ScheduledTask task : dimensionTickTasks)
+        {
+            if (task != null)
+            {
+                task.cancel();
+            }
+        }
+        dimensionTickTasks.clear();
+    }
+
     @Override
     public void onDisable() {
         try {
+            cancelDimensionTicks();
             if (server != null) {
                 CarpetServer.onServerClosed(null);
             }
             CarpetServer.onServerDoneClosing(server);
+            ParrotFolia.detach(this);
+            FoliaRuntime.unbind(this);
         } catch (Throwable t) {
             getLogger().severe("Error during FoliaCarpet disable: " + t);
         }
@@ -199,8 +250,9 @@ public final class CarpetFoliaPlugin extends JavaPlugin implements Listener {
     public void onServerLoad(ServerLoadEvent event) {
         if (event.getType() == ServerLoadEvent.LoadType.RELOAD) {
             try {
-                CarpetServer.onServerLoadedWorlds(server);
+                CarpetServer.reloadWorlds(server);
                 registerCarpetCommands();
+                Bukkit.getGlobalRegionScheduler().run(this, task -> scheduleDimensionTicks());
             } catch (Throwable t) {
                 getLogger().severe("Error in Carpet onServerLoadedWorlds: " + t);
             }

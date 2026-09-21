@@ -5,18 +5,18 @@ import carpet.CarpetSettings;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 
 public class LoggerRegistry
 {
 
-    private static final Map<String, Logger> loggerRegistry = new HashMap<>();
+    private static final Map<String, Logger> loggerRegistry = new ConcurrentHashMap<>();
 
-    private static final Map<String, Map<String, String>> playerSubscriptions = new HashMap<>();
+    private static final Map<String, Map<String, String>> playerSubscriptions = new ConcurrentHashMap<>();
 
     public static boolean __tnt;
     public static boolean __projectiles;
@@ -55,7 +55,7 @@ public class LoggerRegistry
 
     public static void subscribePlayer(String playerName, String logName, String option)
     {
-        if (!playerSubscriptions.containsKey(playerName)) playerSubscriptions.put(playerName, new HashMap<>());
+        playerSubscriptions.computeIfAbsent(playerName, ignored -> new ConcurrentHashMap<>());
         Logger log = loggerRegistry.get(logName);
         if (option == null) option = log.getDefault();
         playerSubscriptions.get(playerName).put(logName,option);
@@ -116,7 +116,7 @@ public class LoggerRegistry
         setAccess(logger);
     }
 
-    private final static Set<String> seenPlayers = new HashSet<>();
+    private final static Set<String> seenPlayers = ConcurrentHashMap.newKeySet();
 
     public static void stopLoggers()
     {

@@ -1,6 +1,7 @@
 package carpet.mixins;
 
 import carpet.fakes.MinecraftServerInterface;
+import carpet.CarpetServer;
 import carpet.script.CarpetScriptServer;
 import net.minecraft.util.Util;
 import net.minecraft.core.RegistryAccess;
@@ -18,16 +19,8 @@ import net.minecraft.world.level.storage.LevelStorageSource;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
 import java.util.Map;
 import java.util.function.BooleanSupplier;
-
-import static carpet.script.CarpetEventServer.Event.ENDER_TICK;
-import static carpet.script.CarpetEventServer.Event.NETHER_TICK;
-import static carpet.script.CarpetEventServer.Event.TICK;
 
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEventLoop<TickTask> implements MinecraftServerInterface
@@ -38,8 +31,6 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
     {
         super(string_1);
     }
-
-    @Shadow protected abstract void tickServer(BooleanSupplier booleanSupplier_1);
 
     @Shadow @Final protected LevelStorageSource.LevelStorageAccess storageSource;
 
@@ -64,10 +55,13 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
     @Override
     public void forceTick(BooleanSupplier isAhead)
     {
-        nextTickTimeNanos = lastOverloadWarningNanos = Util.getNanos();
-        tickServer(isAhead);
-        pollTask();
-        while(pollTask()) {Thread.yield();}
+        if (isAhead == null || isAhead.getAsBoolean())
+        {
+            // A Folia server has no single main-world tick to invoke here.
+            // Preserve Scarpet's logical tick callbacks without touching a
+            // different region from the caller's region thread.
+            CarpetServer.tick((MinecraftServer) (Object) this);
+        }
     }
 
     @Override
@@ -80,21 +74,6 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
     public Map<ResourceKey<Level>, ServerLevel> getCMWorlds()
     {
         return levels;
-    }
-
-    @Inject(method = "tickServer", at = @At(
-            value = "CONSTANT",
-            args = "stringValue=tallying"
-    ))
-    public void tickTasks(BooleanSupplier booleanSupplier_1, CallbackInfo ci)
-    {
-        if (!tickRateManager().runsNormally())
-        {
-            return;
-        }
-        TICK.onTick((MinecraftServer) (Object) this);
-        NETHER_TICK.onTick((MinecraftServer) (Object) this);
-        ENDER_TICK.onTick((MinecraftServer) (Object) this);
     }
 
     @Override

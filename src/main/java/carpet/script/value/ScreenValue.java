@@ -9,6 +9,7 @@ import carpet.script.exception.InvalidCallbackException;
 import carpet.script.exception.ThrowStatement;
 import carpet.script.exception.Throwables;
 import carpet.script.external.Vanilla;
+import carpet.folia.FoliaRuntime;
 
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -130,6 +131,10 @@ public class ScreenValue extends Value
             throw new ThrowStatement(type, Throwables.UNKNOWN_SCREEN);
         }
         this.openScreen(factory);
+        if (this.screenHandler == null)
+        {
+            throw new InternalExpressionException("Unable to open screen for player");
+        }
         this.inventory = new ScreenHandlerInventory(this.screenHandler);
     }
 
@@ -154,14 +159,21 @@ public class ScreenValue extends Value
         {
             return;
         }
-        OptionalInt optionalSyncId = this.player.openMenu(factory);
-        if (optionalSyncId.isPresent() && this.player.containerMenu.containerId == optionalSyncId.getAsInt())
-        {
-            this.screenHandler = this.player.containerMenu;
-        }
+        FoliaRuntime.runOnPlayerAndWait(this.player, target -> {
+            OptionalInt optionalSyncId = target.openMenu(factory);
+            if (optionalSyncId.isPresent() && target.containerMenu.containerId == optionalSyncId.getAsInt())
+            {
+                this.screenHandler = target.containerMenu;
+            }
+        });
     }
 
     public void close()
+    {
+        FoliaRuntime.runOnPlayerAndWait(this.player, ignored -> closeNow());
+    }
+
+    private void closeNow()
     {
         if (this.player.containerMenu != this.player.inventoryMenu)
         {
@@ -444,7 +456,9 @@ public class ScreenValue extends Value
             {
                 return this.screenHandler.getCarried();
             }
-            return slot >= -1 && slot < this.getContainerSize() ? this.screenHandler.slots.get(slot).getItem() : ItemStack.EMPTY;
+            return slot >= 0 && slot < this.screenHandler.slots.size()
+                    ? this.screenHandler.slots.get(slot).getItem()
+                    : ItemStack.EMPTY;
         }
 
         @Override
@@ -476,7 +490,9 @@ public class ScreenValue extends Value
             }
             else
             {
-                itemStack = this.screenHandler.slots.get(slot).getItem();
+                itemStack = slot >= 0 && slot < this.screenHandler.slots.size()
+                        ? this.screenHandler.slots.get(slot).getItem()
+                        : ItemStack.EMPTY;
             }
             if (itemStack.isEmpty())
             {
@@ -490,6 +506,10 @@ public class ScreenValue extends Value
                 }
                 else
                 {
+                    if (slot < 0 || slot >= this.screenHandler.slots.size())
+                    {
+                        return ItemStack.EMPTY;
+                    }
                     this.screenHandler.slots.get(slot).set(ItemStack.EMPTY);
                 }
                 return itemStack;
@@ -505,6 +525,10 @@ public class ScreenValue extends Value
             }
             else
             {
+                if (slot < 0 || slot >= this.screenHandler.slots.size())
+                {
+                    return;
+                }
                 this.screenHandler.slots.get(slot).set(stack);
             }
             if (!stack.isEmpty() && stack.getCount() > this.getMaxStackSize())

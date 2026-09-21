@@ -95,7 +95,7 @@ public final class TntFolia implements Listener
         }
         ConcurrentHashMap<BlockPos, Integer> candidates = PLACE_CANDIDATES
                 .computeIfAbsent(target.getWorld().getUID().toString(), k -> new ConcurrentHashMap<>());
-        candidates.put(pos, CarpetFoliaPlugin.getTick());
+        candidates.put(pos, FoliaRuntime.tick());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -122,7 +122,7 @@ public final class TntFolia implements Listener
             return;
         }
         Integer placedTick = candidates.remove(new BlockPos(block.getX(), block.getY(), block.getZ()));
-        if (placedTick != null && CarpetFoliaPlugin.getTick() - placedTick <= 1)
+        if (placedTick != null && FoliaRuntime.tick() - placedTick <= 1)
         {
             event.setCancelled(true);
         }
@@ -134,7 +134,7 @@ public final class TntFolia implements Listener
         {
             return;
         }
-        int now = CarpetFoliaPlugin.getTick();
+        int now = FoliaRuntime.tick();
         for (ConcurrentHashMap<BlockPos, Integer> candidates : PLACE_CANDIDATES.values())
         {
             candidates.entrySet().removeIf(entry -> now - entry.getValue() > 1);
@@ -147,7 +147,7 @@ public final class TntFolia implements Listener
         {
             return;
         }
-        if (CarpetFoliaPlugin.getTick() % SCAN_INTERVAL != 0)
+        if (FoliaRuntime.tick() % SCAN_INTERVAL != 0)
         {
             return;
         }

@@ -10,6 +10,7 @@ import carpet.script.exception.InternalExpressionException;
 import carpet.script.external.Carpet;
 import carpet.script.utils.EntityTools;
 import carpet.script.utils.InputValidator;
+import carpet.folia.FoliaRuntime;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
@@ -1017,7 +1018,8 @@ public class EntityValue extends Value
             if (e instanceof ServerPlayer player)
             {
                 int slot = NumericValue.asNumber(v).getInt();
-                player.connection.send(new ClientboundSetHeldSlotPacket(slot));
+                FoliaRuntime.runOnPlayer(player, target ->
+                        target.connection.send(new ClientboundSetHeldSlotPacket(slot)));
             }
         });
 
@@ -1199,7 +1201,8 @@ public class EntityValue extends Value
             }
             if (e instanceof ServerPlayer sp)
             {
-                sp.connection.send(new ClientboundSetPassengersPacket(e));
+                FoliaRuntime.runOnPlayer(sp, target ->
+                        target.connection.send(new ClientboundSetPassengersPacket(e)));
             }
         });
         put("unmountable", (e, v) -> Vanilla.Entity_setPermanentVehicle(e, v == null || v.getBoolean()));
@@ -1615,7 +1618,9 @@ public class EntityValue extends Value
             if (e instanceof ServerPlayer p)
             {
                 p.experienceProgress = NumericValue.asNumber(v, "xp_progress").getFloat();
-                p.connection.send(new ClientboundSetExperiencePacket(p.experienceProgress, p.totalExperience, p.experienceLevel));
+                FoliaRuntime.runOnPlayer(p, target -> target.connection.send(
+                        new ClientboundSetExperiencePacket(target.experienceProgress,
+                                target.totalExperience, target.experienceLevel)));
             }
         });
 

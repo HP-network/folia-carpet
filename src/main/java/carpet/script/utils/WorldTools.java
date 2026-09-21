@@ -1,6 +1,7 @@
 package carpet.script.utils;
 
 import carpet.script.external.Vanilla;
+import carpet.folia.FoliaRuntime;
 
 import net.minecraft.util.Util;
 import net.minecraft.core.BlockPos;
@@ -99,7 +100,7 @@ public class WorldTools
             if (!players.isEmpty())
             {
                 ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(worldChunk, world.getLightEngine(), null, null);
-                players.forEach(p -> p.connection.send(packet));
+                players.forEach(p -> FoliaRuntime.runOnPlayer(p, target -> target.connection.send(packet)));
             }
         }
     }

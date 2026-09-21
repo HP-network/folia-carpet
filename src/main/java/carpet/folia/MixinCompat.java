@@ -3,6 +3,7 @@ package carpet.folia;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +15,9 @@ import com.mojang.brigadier.tree.RootCommandNode;
 
 import carpet.script.CarpetScriptServer;
 import carpet.script.EntityEventsGroup;
+import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
+import ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkSystemDistanceManager;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.blocks.BlockInput;
 import net.minecraft.core.BlockPos;
@@ -155,6 +158,10 @@ public final class MixinCompat
         {
             return null;
         }
+        if (player instanceof ServerPlayerInterface accessor && accessor.getActionPack() != null)
+        {
+            return accessor.getActionPack();
+        }
         return PLAYER_ACTION_PACKS.computeIfAbsent(player, EntityPlayerActionPack::new);
     }
 
@@ -167,8 +174,10 @@ public final class MixinCompat
         org.bukkit.plugin.Plugin plugin = FoliaRuntime.plugin();
         for (ServerPlayer player : server.getPlayerList().getPlayers())
         {
-            EntityPlayerActionPack actionPack = PLAYER_ACTION_PACKS.get(player);
-            boolean hasActions = actionPack != null;
+            EntityPlayerActionPack actionPack = player_getActionPack(player);
+            boolean mixinOwnsActionPack = player instanceof ServerPlayerInterface
+                    && ((ServerPlayerInterface) player).getActionPack() != null;
+            boolean hasActions = actionPack != null && !mixinOwnsActionPack;
             boolean noClip = carpet.CarpetSettings.creativeNoClip
                     && player.isCreative()
                     && player.getAbilities().flying;
@@ -187,7 +196,7 @@ public final class MixinCompat
 
                             player.noPhysics = true;
                         }
-                        if (actionPack != null)
+                        if (hasActions && actionPack != null)
                         {
                             actionPack.onUpdate();
                         }
@@ -333,11 +342,26 @@ public final class MixinCompat
 
     public static Long2ObjectOpenHashMap<List<net.minecraft.server.level.Ticket>> ticketManager_getTicketsByPosition(DistanceManager ticketManager)
     {
-        return new Long2ObjectOpenHashMap<>();
+        Long2ObjectOpenHashMap<List<net.minecraft.server.level.Ticket>> result = new Long2ObjectOpenHashMap<>();
+        if (!(ticketManager instanceof ChunkSystemDistanceManager moonriseDistanceManager))
+        {
+            return result;
+        }
+
+        for (var entry : moonriseDistanceManager.moonrise$getChunkHolderManager().getTicketsCopy().long2ObjectEntrySet())
+        {
+            Collection<net.minecraft.server.level.Ticket> tickets = entry.getValue();
+            result.put(entry.getLongKey(), List.copyOf(tickets));
+        }
+        return result;
     }
 
     public static DensityFunction.Visitor randomState_getVisitor(RandomState randomState)
     {
+        if ((Object) randomState instanceof carpet.fakes.RandomStateVisitorAccessor accessor)
+        {
+            return accessor.getVisitor();
+        }
         return null;
     }
 
@@ -421,16 +445,28 @@ public final class MixinCompat
     @SuppressWarnings("unchecked")
     private static <T> T readObject(Object target, String fieldName)
     {
-        try
-        {
-            Field f = target.getClass().getDeclaredField(fieldName);
-            f.setAccessible(true);
-            return (T) f.get(target);
-        }
-        catch (Exception e)
+        if (target == null)
         {
             return null;
         }
+        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass())
+        {
+            try
+            {
+                Field f = type.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                return (T) f.get(target);
+            }
+            catch (NoSuchFieldException ignored)
+            {
+                // Fields in Mojang classes are often declared on a parent.
+            }
+            catch (ReflectiveOperationException | RuntimeException ignored)
+            {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static boolean readBoolean(Object target, String fieldName)
@@ -447,14 +483,26 @@ public final class MixinCompat
 
     private static void writeInt(Object target, String fieldName, int value)
     {
-        try
+        if (target == null)
         {
-            Field f = target.getClass().getDeclaredField(fieldName);
-            f.setAccessible(true);
-            f.setInt(target, value);
+            return;
         }
-        catch (Exception ignored)
+        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass())
         {
+            try
+            {
+                Field f = type.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                f.setInt(target, value);
+                return;
+            }
+            catch (NoSuchFieldException ignored)
+            {
+            }
+            catch (ReflectiveOperationException | RuntimeException ignored)
+            {
+                return;
+            }
         }
     }
 }

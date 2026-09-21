@@ -2,12 +2,14 @@ package carpet.logging;
 
 import carpet.CarpetServer;
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import net.minecraft.util.Util;
 import net.minecraft.network.chat.Component;
@@ -55,8 +57,8 @@ public class Logger
 
     public Logger(Field acceleratorField, String logName, String def, String [] options, boolean strictOptions)
     {
-        subscribedOnlinePlayers = new HashMap<>();
-        subscribedOfflinePlayers = new HashMap<>();
+        subscribedOnlinePlayers = new ConcurrentHashMap<>();
+        subscribedOfflinePlayers = new ConcurrentHashMap<>();
         this.acceleratorField = acceleratorField;
         this.logName = logName;
         this.default_option = def;
@@ -124,9 +126,12 @@ public class Logger
             ServerPlayer player = playerFromName(en.getKey());
             if (player != null)
             {
-                Component [] messages = messagePromise.get(en.getValue(),player);
-                if (messages != null)
-                    sendPlayerMessage(player, messages);
+                String option = en.getValue();
+                FoliaRuntime.runOnPlayer(player, target -> {
+                    Component [] messages = messagePromise.get(option, target);
+                    if (messages != null)
+                        sendPlayerMessage(target, messages);
+                });
             }
         }
     }
@@ -148,7 +153,7 @@ public class Logger
                 }
                 Component [] messages = cannedMessages.get(option);
                 if (messages != null)
-                    sendPlayerMessage(player, messages);
+                    FoliaRuntime.runOnPlayer(player, target -> sendPlayerMessage(target, messages));
             }
         }
     }
@@ -162,7 +167,11 @@ public class Logger
             if (player != null)
             {
                 if (cannedMessages == null) cannedMessages = messagePromise.get();
-                sendPlayerMessage(player, cannedMessages);
+                if (cannedMessages != null)
+                {
+                    Component[] messages = cannedMessages;
+                    FoliaRuntime.runOnPlayer(player, target -> sendPlayerMessage(target, messages));
+                }
             }
         }
     }
@@ -174,6 +183,10 @@ public class Logger
 
     protected ServerPlayer playerFromName(String name)
     {
+        if (CarpetServer.minecraft_server == null || CarpetServer.minecraft_server.getPlayerList() == null)
+        {
+            return null;
+        }
         return CarpetServer.minecraft_server.getPlayerList().getPlayerByName(name);
     }
 

@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
+import carpet.folia.FoliaRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -243,7 +244,11 @@ public class Messenger
     }
     public static void m(Player player, Object ... fields)
     {
-        ((ServerPlayer)player).sendSystemMessage(Messenger.c(fields));
+        if (player instanceof ServerPlayer serverPlayer)
+        {
+            Component message = Messenger.c(fields);
+            FoliaRuntime.runOnPlayer(serverPlayer, target -> target.sendSystemMessage(message));
+        }
     }
 
     public static Component c(Object ... fields)
@@ -279,7 +284,11 @@ public class Messenger
 
     public static void send(Player player, Collection<Component> lines)
     {
-        lines.forEach(message -> ((ServerPlayer)player).sendSystemMessage(message));
+        if (player instanceof ServerPlayer serverPlayer)
+        {
+            List<Component> messages = List.copyOf(lines);
+            FoliaRuntime.runOnPlayer(serverPlayer, target -> messages.forEach(target::sendSystemMessage));
+        }
     }
     public static void send(CommandSourceStack source, Collection<Component> lines)
     {
@@ -289,22 +298,28 @@ public class Messenger
     public static void print_server_message(MinecraftServer server, String message)
     {
         if (server == null)
+        {
             LOG.error("Message not delivered: "+message);
+            return;
+        }
         server.sendSystemMessage(Component.literal(message));
         Component txt = c("gi "+message);
         for (ServerPlayer entityplayer : server.getPlayerList().getPlayers())
         {
-            entityplayer.sendSystemMessage(txt);
+            FoliaRuntime.runOnPlayer(entityplayer, target -> target.sendSystemMessage(txt));
         }
     }
     public static void print_server_message(MinecraftServer server, Component message)
     {
         if (server == null)
+        {
             LOG.error("Message not delivered: "+message.getString());
+            return;
+        }
         server.sendSystemMessage(message);
         for (ServerPlayer entityplayer : server.getPlayerList().getPlayers())
         {
-            entityplayer.sendSystemMessage(message);
+            FoliaRuntime.runOnPlayer(entityplayer, target -> target.sendSystemMessage(message));
         }
     }
 }

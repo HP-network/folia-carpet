@@ -11,8 +11,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 
-import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.craftbukkit.entity.CraftItem;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -39,32 +37,19 @@ public final class ShulkerFolia implements Listener
         {
             return;
         }
-        if (CarpetFoliaPlugin.getTick() % SCAN_INTERVAL != 0)
+        if (FoliaRuntime.tick() % SCAN_INTERVAL != 0)
         {
             return;
         }
         List<ServerPlayer> players = new ArrayList<>(server.getPlayerList().getPlayers());
         for (ServerPlayer player : players)
         {
-            if (player.isRemoved())
-            {
-                continue;
-            }
-            ServerLevel level = (ServerLevel) player.level();
-            World world = level.getWorld();
-            if (world == null)
-            {
-                continue;
-            }
-            try
-            {
-                Bukkit.getRegionScheduler().execute(plugin, world,
-                        player.getBlockX() >> 4, player.getBlockZ() >> 4,
-                        () -> consolidatePlayer(player));
-            }
-            catch (Throwable ignored)
-            {
-            }
+            FoliaRuntime.runOnPlayer(player, target -> {
+                if (!target.isRemoved())
+                {
+                    consolidatePlayer(target);
+                }
+            });
         }
     }
 

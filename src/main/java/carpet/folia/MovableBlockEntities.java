@@ -49,7 +49,7 @@ public final class MovableBlockEntities
         {
             return;
         }
-        int tick = CarpetFoliaPlugin.getTick();
+        int tick = FoliaRuntime.tick();
         if (tick % SCAN_INTERVAL != 0)
         {
             return;
