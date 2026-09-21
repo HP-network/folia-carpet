@@ -26,6 +26,11 @@ for repo in "$source_dir" "$source_dir/paper-api" "$source_dir/paper-server"; do
     fi
 done
 
+export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-FoliaCarpet Builder}"
+export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-build@localhost}"
+export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-FoliaCarpet Builder}"
+export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-build@localhost}"
+
 if [[ ! -f "$source_dir/folia-server/build/libs/folia-server-${version}-R0.1-SNAPSHOT.jar" ]]; then
     (cd "$source_dir" && ./gradlew applyAllPatches && ./gradlew :folia-server:build --no-daemon)
 fi
