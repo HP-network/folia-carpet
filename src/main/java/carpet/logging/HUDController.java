@@ -63,8 +63,8 @@ public class HUDController
 
     public static void clearPlayer(ServerPlayer player)
     {
-        FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
-                new ClientboundTabListPacket(Component.literal(""), Component.literal(""))));
+        FoliaRuntime.sendPacket(player,
+                new ClientboundTabListPacket(Component.literal(""), Component.literal("")));
     }
 
     public static void update_hud(MinecraftServer server, List<ServerPlayer> force)

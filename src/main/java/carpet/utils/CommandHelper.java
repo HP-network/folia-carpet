@@ -1,11 +1,13 @@
 package carpet.utils;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerPlayer;
+
+import java.util.List;
 
 public final class CommandHelper {
     private CommandHelper() {}
@@ -16,42 +18,16 @@ public final class CommandHelper {
         {
             return;
         }
-        int scheduledTick;
         try
         {
-            scheduledTick = server.getTickCount();
-        }
-        catch (UnsupportedOperationException e)
-        {
-            scheduledTick = 0;
-        }
-        try
-        {
-            server.schedule(new TickTask(scheduledTick, () ->
+            for (ServerPlayer player : List.copyOf(server.getPlayerList().getPlayers()))
             {
-                try {
-                    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                        server.getCommands().sendCommands(player);
-                    }
-                }
-                catch (NullPointerException e)
-                {
-                    CarpetSettings.LOG.warn("Exception while refreshing commands, please report this to Carpet", e);
-                }
-            }));
-        }
-        catch (UnsupportedOperationException syncFallback)
-        {
-            try
-            {
-                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                    server.getCommands().sendCommands(player);
-                }
+                FoliaRuntime.runOnPlayer(player, target -> server.getCommands().sendCommands(target));
             }
-            catch (NullPointerException e)
-            {
-                CarpetSettings.LOG.warn("Exception while refreshing commands, please report this to Carpet", e);
-            }
+        }
+        catch (NullPointerException e)
+        {
+            CarpetSettings.LOG.warn("Exception while refreshing commands, please report this to Carpet", e);
         }
     }
 

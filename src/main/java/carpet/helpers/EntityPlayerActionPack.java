@@ -282,8 +282,7 @@ public class EntityPlayerActionPack
     public void setSlot(int slot)
     {
         player.getInventory().setSelectedSlot(slot-1);
-        FoliaRuntime.runOnPlayer(player,
-                target -> target.connection.send(new ClientboundSetHeldSlotPacket(slot-1)));
+        FoliaRuntime.sendPacket(player, new ClientboundSetHeldSlotPacket(slot-1));
     }
 
     public enum ActionType

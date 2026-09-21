@@ -1018,8 +1018,7 @@ public class EntityValue extends Value
             if (e instanceof ServerPlayer player)
             {
                 int slot = NumericValue.asNumber(v).getInt();
-                FoliaRuntime.runOnPlayer(player, target ->
-                        target.connection.send(new ClientboundSetHeldSlotPacket(slot)));
+                FoliaRuntime.sendPacket(player, new ClientboundSetHeldSlotPacket(slot));
             }
         });
 
@@ -1201,8 +1200,7 @@ public class EntityValue extends Value
             }
             if (e instanceof ServerPlayer sp)
             {
-                FoliaRuntime.runOnPlayer(sp, target ->
-                        target.connection.send(new ClientboundSetPassengersPacket(e)));
+                FoliaRuntime.sendPacket(sp, new ClientboundSetPassengersPacket(e));
             }
         });
         put("unmountable", (e, v) -> Vanilla.Entity_setPermanentVehicle(e, v == null || v.getBoolean()));
@@ -1617,10 +1615,12 @@ public class EntityValue extends Value
         put("xp_progress", (e, v) -> {
             if (e instanceof ServerPlayer p)
             {
-                p.experienceProgress = NumericValue.asNumber(v, "xp_progress").getFloat();
-                FoliaRuntime.runOnPlayer(p, target -> target.connection.send(
-                        new ClientboundSetExperiencePacket(target.experienceProgress,
-                                target.totalExperience, target.experienceLevel)));
+                float progress = NumericValue.asNumber(v, "xp_progress").getFloat();
+                FoliaRuntime.runOnPlayer(p, target -> {
+                    target.experienceProgress = progress;
+                    target.connection.send(new ClientboundSetExperiencePacket(target.experienceProgress,
+                            target.totalExperience, target.experienceLevel));
+                });
             }
         });
 

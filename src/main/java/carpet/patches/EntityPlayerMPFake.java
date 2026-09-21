@@ -259,7 +259,7 @@ public class EntityPlayerMPFake extends ServerPlayer
         {
             if (dimension.equals(recipient.level().dimension()))
             {
-                carpet.folia.FoliaRuntime.runOnPlayer(recipient, target -> target.connection.send(packet));
+                carpet.folia.FoliaRuntime.sendPacket(recipient, packet);
             }
         }
     }
@@ -268,7 +268,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         for (ServerPlayer recipient : new ArrayList<>(server.getPlayerList().getPlayers()))
         {
-            carpet.folia.FoliaRuntime.runOnPlayer(recipient, target -> target.connection.send(packet));
+            carpet.folia.FoliaRuntime.sendPacket(recipient, packet);
         }
     }
 

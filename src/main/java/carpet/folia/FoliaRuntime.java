@@ -2,10 +2,16 @@ package carpet.folia;
 
 import org.bukkit.plugin.Plugin;
 import org.bukkit.Bukkit;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 
+import java.util.Collection;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
@@ -103,6 +109,143 @@ public final class FoliaRuntime
         catch (Throwable ignored)
         {
             // The player may have disconnected between lookup and scheduling.
+        }
+    }
+
+    /** Sends a system message on the player's region thread. */
+    public static void sendSystemMessage(ServerPlayer player, Component message)
+    {
+        if (message != null)
+        {
+            runOnPlayer(player, target -> target.sendSystemMessage(message));
+        }
+    }
+
+    /** Sends a sequence of system messages without losing their order. */
+    public static void sendSystemMessages(ServerPlayer player, Collection<? extends Component> messages)
+    {
+        if (messages == null || messages.isEmpty())
+        {
+            return;
+        }
+        java.util.List<Component> copy = java.util.List.copyOf(messages);
+        runOnPlayer(player, target -> copy.forEach(target::sendSystemMessage));
+    }
+
+    /** Sends a packet from the player's region thread. */
+    public static void sendPacket(ServerPlayer player, Packet<?> packet)
+    {
+        if (packet != null)
+        {
+            runOnPlayer(player, target -> target.connection.send(packet));
+        }
+    }
+
+    /** Sends several packets in order from one region task. */
+    public static void sendPackets(ServerPlayer player, Packet<?>... packets)
+    {
+        if (packets == null || packets.length == 0)
+        {
+            return;
+        }
+        runOnPlayer(player, target -> {
+            for (Packet<?> packet : packets)
+            {
+                if (packet != null)
+                {
+                    target.connection.send(packet);
+                }
+            }
+        });
+    }
+
+    /** Runs work that belongs to Folia's global region. */
+    public static void runOnGlobal(Runnable action)
+    {
+        if (action == null)
+        {
+            return;
+        }
+        Plugin owner = plugin();
+        if (owner == null)
+        {
+            return;
+        }
+        try
+        {
+            if (Bukkit.isGlobalTickThread())
+            {
+                action.run();
+            }
+            else
+            {
+                Bukkit.getGlobalRegionScheduler().execute(owner, action);
+            }
+        }
+        catch (Throwable ignored)
+        {
+            // The server can be between startup and shutdown here.
+        }
+    }
+
+    /** Delivers a server-wide system message on the global region. */
+    public static void sendServerMessage(MinecraftServer server, Component message)
+    {
+        if (server != null && message != null)
+        {
+            if (plugin() == null)
+            {
+                server.sendSystemMessage(message);
+            }
+            else
+            {
+                runOnGlobal(() -> server.sendSystemMessage(message));
+            }
+        }
+    }
+
+    /** Preserves command feedback semantics while moving player output to its region. */
+    public static void sendCommandSuccess(CommandSourceStack source, Supplier<Component> message,
+                                          boolean broadcastToOps)
+    {
+        if (source == null || message == null)
+        {
+            return;
+        }
+        if (source instanceof carpet.script.utils.SnoopyCommandSource)
+        {
+            source.sendSuccess(message, broadcastToOps);
+            return;
+        }
+        if (source.getEntity() instanceof ServerPlayer player)
+        {
+            runOnPlayer(player, ignored -> source.sendSuccess(message, broadcastToOps));
+        }
+        else
+        {
+            source.sendSuccess(message, broadcastToOps);
+        }
+    }
+
+    /** Preserves command failure semantics while moving player output to its region. */
+    public static void sendCommandFailure(CommandSourceStack source, Component message)
+    {
+        if (source == null || message == null)
+        {
+            return;
+        }
+        if (source instanceof carpet.script.utils.SnoopyCommandSource)
+        {
+            source.sendFailure(message);
+            return;
+        }
+        if (source.getEntity() instanceof ServerPlayer player)
+        {
+            runOnPlayer(player, ignored -> source.sendFailure(message));
+        }
+        else
+        {
+            source.sendFailure(message);
         }
     }
 

@@ -61,7 +61,7 @@ public class ServerNetworkHandler
         }
         DataBuilder data = DataBuilder.create(playerEntity.level().getServer());
         CarpetServer.forEachManager(sm -> sm.getCarpetRules().forEach(data::withRule));
-        playerEntity.connection.send(data.build());
+        FoliaRuntime.sendPacket(playerEntity, data.build());
     }
 
     public static void sendPlayerLevelData(ServerPlayer player, ServerLevel level)
@@ -106,7 +106,8 @@ public class ServerNetworkHandler
         {
             result.put("output", outputResult);
         }
-        player.connection.send(DataBuilder.create(player.level().getServer()).withCustomNbt("clientCommand", result).build());
+        FoliaRuntime.sendPacket(player,
+                DataBuilder.create(player.level().getServer()).withCustomNbt("clientCommand", result).build());
 
     }
 
@@ -133,8 +134,8 @@ public class ServerNetworkHandler
         }
         for (ServerPlayer player : remoteCarpetPlayers.keySet())
         {
-            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
-                    DataBuilder.create(CarpetServer.minecraft_server).withRule(rule).build()));
+            FoliaRuntime.sendPacket(player,
+                    DataBuilder.create(CarpetServer.minecraft_server).withRule(rule).build());
         }
     }
 
@@ -146,8 +147,8 @@ public class ServerNetworkHandler
         }
         for (ServerPlayer player : validCarpetPlayers)
         {
-            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
-                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build()));
+            FoliaRuntime.sendPacket(player,
+                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build());
         }
     }
 
@@ -155,8 +156,8 @@ public class ServerNetworkHandler
     {
         if (isValidCarpetPlayer(player))
         {
-            FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
-                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build()));
+            FoliaRuntime.sendPacket(player,
+                    DataBuilder.create(CarpetServer.minecraft_server).withCustomNbt(command, data).build());
         }
     }
 

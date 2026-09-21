@@ -240,14 +240,17 @@ public class Messenger
     public static void m(CommandSourceStack source, Object ... fields)
     {
         if (source != null)
-            source.sendSuccess(() -> Messenger.c(fields), source.getServer() != null && source.getServer().overworld() != null);
+        {
+            boolean broadcast = source.getServer() != null && source.getServer().overworld() != null;
+            FoliaRuntime.sendCommandSuccess(source, () -> Messenger.c(fields), broadcast);
+        }
     }
     public static void m(Player player, Object ... fields)
     {
         if (player instanceof ServerPlayer serverPlayer)
         {
             Component message = Messenger.c(fields);
-            FoliaRuntime.runOnPlayer(serverPlayer, target -> target.sendSystemMessage(message));
+            FoliaRuntime.sendSystemMessage(serverPlayer, message);
         }
     }
 
@@ -286,13 +289,12 @@ public class Messenger
     {
         if (player instanceof ServerPlayer serverPlayer)
         {
-            List<Component> messages = List.copyOf(lines);
-            FoliaRuntime.runOnPlayer(serverPlayer, target -> messages.forEach(target::sendSystemMessage));
+            FoliaRuntime.sendSystemMessages(serverPlayer, lines);
         }
     }
     public static void send(CommandSourceStack source, Collection<Component> lines)
     {
-        lines.stream().forEachOrdered((s) -> source.sendSuccess(() -> s, false));
+        lines.stream().forEachOrdered((s) -> FoliaRuntime.sendCommandSuccess(source, () -> s, false));
     }
 
     public static void print_server_message(MinecraftServer server, String message)
@@ -302,11 +304,11 @@ public class Messenger
             LOG.error("Message not delivered: "+message);
             return;
         }
-        server.sendSystemMessage(Component.literal(message));
+        FoliaRuntime.sendServerMessage(server, Component.literal(message));
         Component txt = c("gi "+message);
         for (ServerPlayer entityplayer : server.getPlayerList().getPlayers())
         {
-            FoliaRuntime.runOnPlayer(entityplayer, target -> target.sendSystemMessage(txt));
+            FoliaRuntime.sendSystemMessage(entityplayer, txt);
         }
     }
     public static void print_server_message(MinecraftServer server, Component message)
@@ -316,10 +318,10 @@ public class Messenger
             LOG.error("Message not delivered: "+message.getString());
             return;
         }
-        server.sendSystemMessage(message);
+        FoliaRuntime.sendServerMessage(server, message);
         for (ServerPlayer entityplayer : server.getPlayerList().getPlayers())
         {
-            FoliaRuntime.runOnPlayer(entityplayer, target -> target.sendSystemMessage(message));
+            FoliaRuntime.sendSystemMessage(entityplayer, message);
         }
     }
 }

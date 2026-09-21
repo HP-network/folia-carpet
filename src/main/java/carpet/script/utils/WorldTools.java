@@ -100,7 +100,7 @@ public class WorldTools
             if (!players.isEmpty())
             {
                 ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(worldChunk, world.getLightEngine(), null, null);
-                players.forEach(p -> FoliaRuntime.runOnPlayer(p, target -> target.connection.send(packet)));
+                players.forEach(p -> FoliaRuntime.sendPacket(p, packet));
             }
         }
     }

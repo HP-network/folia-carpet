@@ -2,6 +2,7 @@ package carpet.commands;
 
 import carpet.CarpetSettings;
 import carpet.helpers.HopperCounter;
+import carpet.folia.FoliaRuntime;
 import carpet.utils.Messenger;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -43,7 +44,7 @@ public class CounterCommand
 
         for (Component message: counter.format(source.getServer(), realtime, false))
         {
-            source.sendSuccess(() -> message, false);
+            FoliaRuntime.sendCommandSuccess(source, () -> message, false);
         }
         return 1;
     }
@@ -66,7 +67,7 @@ public class CounterCommand
     {
         for (Component message: HopperCounter.formatAll(source.getServer(), realtime))
         {
-            source.sendSuccess(() -> message, false);
+            FoliaRuntime.sendCommandSuccess(source, () -> message, false);
         }
         return 1;
     }

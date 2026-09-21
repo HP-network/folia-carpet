@@ -171,9 +171,8 @@ public class Auxiliary
             for (ServerPlayer player : level.getPlayers(p -> p.distanceToSqr(vec) < d0))
             {
                 count++;
-                FoliaRuntime.runOnPlayer(player, target -> target.connection.send(
-                        new ClientboundSoundPacket(soundHolder, soundMixer, vec.x, vec.y, vec.z,
-                                soundVolume, soundPitch, seed)));
+                FoliaRuntime.sendPacket(player, new ClientboundSoundPacket(soundHolder, soundMixer, vec.x, vec.y, vec.z,
+                        soundVolume, soundPitch, seed));
             }
             return new NumericValue(count);
         });
@@ -533,11 +532,11 @@ public class Auxiliary
             Component message = FormattedTextValue.getTextByValue(res);
             if (targets == null)
             {
-                s.sendSuccess(() -> message, false);
+                FoliaRuntime.sendCommandSuccess(s, () -> message, false);
             }
             else
             {
-                targets.forEach(p -> p.sendSuccess(() -> message, false));
+                targets.forEach(p -> FoliaRuntime.sendCommandSuccess(p, () -> message, false));
             }
             return res;
         });
@@ -661,13 +660,10 @@ public class Auxiliary
             Packet<?> packet = packetGetter.apply(title);
             AtomicInteger total = new AtomicInteger(0);
             targets.forEach(p -> {
-                FoliaRuntime.runOnPlayer(p, target -> {
-                    if (timesPacket != null)
-                    {
-                        target.connection.send(timesPacket);
-                    }
-                    target.connection.send(packet);
-                });
+                if (timesPacket == null)
+                    FoliaRuntime.sendPacket(p, packet);
+                else
+                    FoliaRuntime.sendPackets(p, timesPacket, packet);
                 total.getAndIncrement();
             });
             return NumericValue.of(total.get());

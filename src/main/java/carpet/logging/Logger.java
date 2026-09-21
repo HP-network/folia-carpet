@@ -178,7 +178,7 @@ public class Logger
 
     public void sendPlayerMessage(ServerPlayer player, Component ... messages)
     {
-        Arrays.stream(messages).forEach(player::sendSystemMessage);
+        FoliaRuntime.sendSystemMessages(player, Arrays.asList(messages));
     }
 
     protected ServerPlayer playerFromName(String name)
