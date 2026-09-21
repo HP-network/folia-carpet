@@ -13,11 +13,6 @@ if [[ -f "$target" ]]; then
     exit 0
 fi
 
-: "${https_proxy:=http://127.0.0.1:7890}"
-: "${http_proxy:=http://127.0.0.1:7890}"
-: "${all_proxy:=socks5://127.0.0.1:7890}"
-export https_proxy http_proxy all_proxy
-
 source_dir="${FOLIA_SOURCE_DIR:-${TMPDIR:-/tmp}/folia-carpet-folia-${version}-$folia_commit}"
 if [[ ! -d "$source_dir/.git" ]]; then
     git clone --filter=blob:none https://github.com/PaperMC/Folia.git "$source_dir"

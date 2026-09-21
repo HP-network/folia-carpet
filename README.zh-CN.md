@@ -30,6 +30,8 @@ Carpet 中有一部分功能完全依赖 Fabric Mixin 修改 Minecraft 内部类
 
 NMS 编译类路径由固定的 Folia 源码 commit 生成。服务端开发 jar 只作为本地构建依赖，不提交到 Git。
 
+脚本会沿用机器上已有的代理环境。网络受限时，请在运行前导出下面的代理变量；CI 使用自身的直连网络。
+
 ```sh
 export https_proxy=http://127.0.0.1:7890
 export http_proxy=http://127.0.0.1:7890

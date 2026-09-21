@@ -30,6 +30,8 @@ The version is intentionally pinned. Do not install this jar on another Minecraf
 
 The NMS compile classpath is generated from a pinned Folia source commit. The server jar is a local build dependency and is not committed to Git.
 
+The script respects the proxy environment already configured on the machine. In a restricted network, export the proxy variables shown below before running it; CI uses its normal direct network connection.
+
 ```sh
 export https_proxy=http://127.0.0.1:7890
 export http_proxy=http://127.0.0.1:7890
