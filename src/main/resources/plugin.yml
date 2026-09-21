@@ -1,0 +1,16 @@
+name: FoliaCarpet
+version: '${version}'
+main: com.hpnetwork.foliacarpet.FoliaCarpetPlugin
+api-version: '1.21'
+folia-supported: true
+authors: [HP-network]
+description: Folia-native technical rules and region-safe server controls.
+website: https://github.com/HP-network/folia-carpet
+commands:
+  carpet:
+    description: Inspect and change FoliaCarpet rules
+    usage: /carpet [list|set|lang|status]
+    permission: foliacarpet.command
+permissions:
+  foliacarpet.command:
+    default: op
