@@ -1,6 +1,7 @@
 package carpet.utils;
 
 import carpet.CarpetServer;
+import carpet.folia.FoliaRuntime;
 import com.google.common.collect.Sets;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,13 +42,26 @@ public class MobAI
     public static void clearTracking(final MinecraftServer server, EntityType<? extends Entity> etype)
     {
         aiTrackers.remove(etype);
-        for(ServerLevel world : server.getAllLevels() )
+        if (FoliaRuntime.plugin() != null && FoliaRuntime.isGlobalThread())
         {
-            for (Entity e: world.getEntities(etype, Entity::hasCustomName))
+            for (ServerLevel world : server.getAllLevels())
             {
-                e.setCustomNameVisible(false);
-                e.setCustomName(null);
+                FoliaRuntime.runOnRegion(world, BlockPos.ZERO, () -> clearCustomNames(world, etype));
             }
+            return;
+        }
+        for (ServerLevel world : server.getAllLevels())
+        {
+            clearCustomNames(world, etype);
+        }
+    }
+
+    private static void clearCustomNames(ServerLevel world, EntityType<? extends Entity> etype)
+    {
+        for (Entity e: world.getEntities(etype, Entity::hasCustomName))
+        {
+            e.setCustomNameVisible(false);
+            e.setCustomName(null);
         }
     }
 

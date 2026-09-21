@@ -3,6 +3,7 @@ package carpet.script;
 import carpet.script.external.Carpet;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.AppStoreManager;
+import carpet.folia.FoliaRuntime;
 import carpet.script.exception.CarpetExpressionException;
 import carpet.script.value.FunctionValue;
 import carpet.script.value.NumericValue;
@@ -405,6 +406,16 @@ public class ScriptCommand
         return host;
     }
 
+    private static boolean dispatchToRegion(CommandSourceStack source, BlockPos pos, Runnable task)
+    {
+        if (!FoliaRuntime.isGlobalThread())
+        {
+            return false;
+        }
+        FoliaRuntime.runOnRegion(source.getLevel(), pos, task);
+        return true;
+    }
+
     private static Collection<String> suggestFunctionCalls(CommandContext<CommandSourceStack> c) throws CommandSyntaxException
     {
         CarpetScriptHost host = getHost(c);
@@ -538,6 +549,13 @@ public class ScriptCommand
             positions.add(pos2.getZ());
         }
 
+        BlockPos executionPos = pos1 == null ? BlockPos.containing(source.getPosition()) : pos1;
+        if (dispatchToRegion(source, executionPos,
+                () -> handleCall(source, host, () -> host.callLegacy(source, call, positions, args))))
+        {
+            return 1;
+        }
+
         return handleCall(source, host, () -> host.callLegacy(source, call, positions, args));
     }
 
@@ -545,6 +563,13 @@ public class ScriptCommand
     {
         CommandSourceStack source = context.getSource();
         CarpetScriptHost host = getHost(context);
+        if (dispatchToRegion(source, BlockPos.containing(source.getPosition()), () -> handleCall(source, host, () -> {
+            CarpetExpression ex = new CarpetExpression(host.main, expr, source, new BlockPos(0, 0, 0));
+            return ex.scriptRunCommand(host, BlockPos.containing(source.getPosition())).getLeft();
+        })))
+        {
+            return 1;
+        }
         return handleCall(source, host, () -> {
             CarpetExpression ex = new CarpetExpression(host.main, expr, source, new BlockPos(0, 0, 0));
             return ex.scriptRunCommand(host, BlockPos.containing(source.getPosition())).getLeft();
@@ -649,6 +674,19 @@ public class ScriptCommand
     private static int scriptScan(CommandContext<CommandSourceStack> context, BlockPos origin, BlockPos a, BlockPos b, String expr) throws CommandSyntaxException
     {
         CommandSourceStack source = context.getSource();
+        if (dispatchToRegion(source, origin, () -> {
+            try
+            {
+                scriptScan(context, origin, a, b, expr);
+            }
+            catch (CommandSyntaxException error)
+            {
+                FoliaRuntime.sendCommandFailure(source, Component.literal(error.getMessage()));
+            }
+        }))
+        {
+            return 1;
+        }
         CarpetScriptHost host = getHost(context);
         BoundingBox area = BoundingBox.fromCorners(a, b);
         CarpetExpression cexpr = new CarpetExpression(host.main, expr, source, origin);
@@ -700,6 +738,19 @@ public class ScriptCommand
                                   BlockInput block, Predicate<BlockInWorld> replacement, String mode) throws CommandSyntaxException
     {
         CommandSourceStack source = context.getSource();
+        if (dispatchToRegion(source, origin, () -> {
+            try
+            {
+                scriptFill(context, origin, a, b, expr, block, replacement, mode);
+            }
+            catch (CommandSyntaxException error)
+            {
+                FoliaRuntime.sendCommandFailure(source, Component.literal(error.getMessage()));
+            }
+        }))
+        {
+            return 1;
+        }
         CarpetScriptHost host = getHost(context);
         BoundingBox area = BoundingBox.fromCorners(a, b);
         CarpetExpression cexpr = new CarpetExpression(host.main, expr, source, origin);

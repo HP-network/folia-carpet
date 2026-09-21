@@ -2,6 +2,7 @@ package carpet.script.utils;
 
 import carpet.script.CarpetScriptServer;
 import carpet.script.external.Vanilla;
+import carpet.folia.FoliaRuntime;
 import com.google.common.collect.ImmutableList;
 
 import java.util.HashMap;
@@ -450,7 +451,11 @@ public class FeatureGenerator
                     }
                     if (box.intersects(k1 << 4, l1 << 4, (k1 << 4) + 15, (l1 << 4) + 15))
                     {
-                        world.getChunk(k1, l1).addReferenceForStructure(structure, chId);
+                        final int referenceChunkX = k1;
+                        final int referenceChunkZ = l1;
+                        BlockPos referencePos = new BlockPos(referenceChunkX << 4, pos.getY(), referenceChunkZ << 4);
+                        FoliaRuntime.runOnRegionAndWait(world, referencePos,
+                                () -> world.getChunk(referenceChunkX, referenceChunkZ).addReferenceForStructure(structure, chId));
                     }
                 }
             }

@@ -1,6 +1,7 @@
 package carpet.commands;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
 import com.google.common.collect.Lists;
@@ -37,6 +38,16 @@ import static net.minecraft.commands.SharedSuggestionProvider.suggest;
 
 public class DrawCommand
 {
+    private static boolean dispatchToRegion(CommandContext<CommandSourceStack> ctx, BlockPos pos, Runnable task)
+    {
+        if (!FoliaRuntime.isGlobalThread())
+        {
+            return false;
+        }
+        FoliaRuntime.runOnRegion(ctx.getSource().getLevel(), pos, task);
+        return true;
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, final CommandBuildContext context)
     {
         LiteralArgumentBuilder<CommandSourceStack> command = literal("draw").
@@ -168,6 +179,9 @@ public class DrawCommand
 
         int affected = 0;
         ServerLevel world = ctx.getSource().getLevel();
+        if (dispatchToRegion(ctx, pos, () -> {
+            try { drawSphere(ctx, solid); } catch (CommandSyntaxException ignored) { }
+        })) return 1;
 
         double radiusX = radius+0.5;
         double radiusY = radius+0.5;
@@ -269,6 +283,9 @@ public class DrawCommand
         List<BlockPos> list = Lists.newArrayList();
 
         ServerLevel world = source.getLevel();
+        if (dispatchToRegion(ctx, pos, () -> {
+            try { drawDiamond(ctx, solid); } catch (CommandSyntaxException ignored) { }
+        })) return 1;
 
         CarpetSettings.impendingFillSkipUpdates.set(!CarpetSettings.fillUpdates);
 
@@ -372,6 +389,9 @@ public class DrawCommand
         List<BlockPos> list = Lists.newArrayList();
 
         ServerLevel world = source.getLevel();
+        if (dispatchToRegion(ctx, pos, () -> {
+            try { drawPyramid(ctx, base, solid); } catch (CommandSyntaxException ignored) { }
+        })) return 1;
 
         CarpetSettings.impendingFillSkipUpdates.set(!CarpetSettings.fillUpdates);
 
@@ -424,6 +444,7 @@ public class DrawCommand
         List<BlockPos> list = Lists.newArrayList();
 
         ServerLevel world = source.getLevel();
+        if (dispatchToRegion(ctx, pos, () -> drawPrism(ctx, base))) return 1;
 
         CarpetSettings.impendingFillSkipUpdates.set(!CarpetSettings.fillUpdates);
 

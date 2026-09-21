@@ -6,6 +6,7 @@ import carpet.script.exception.InvalidCallbackException;
 import carpet.script.external.Carpet;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.GlocalFlag;
+import carpet.folia.FoliaRuntime;
 import carpet.script.value.BlockValue;
 import carpet.script.value.BooleanValue;
 import carpet.script.value.EntityValue;
@@ -74,7 +75,7 @@ import org.jspecify.annotations.Nullable;
 
 public class CarpetEventServer
 {
-    public final List<ScheduledCall> scheduledCalls = new LinkedList<>();
+    public final List<ScheduledCall> scheduledCalls = Collections.synchronizedList(new LinkedList<>());
     public final CarpetScriptServer scriptServer;
     private static final List<Value> NOARGS = Collections.emptyList();
     public final Map<String, Event> customEvents = new HashMap<>();
@@ -163,7 +164,16 @@ public class CarpetEventServer
 
         public void execute()
         {
-            scriptServer.events.runScheduledCall(ctx.origin(), ctx.source(), host, (CarpetScriptHost) ctx.host, function, parametrizedArgs);
+            Runnable call = () -> scriptServer.events.runScheduledCall(
+                    ctx.origin(), ctx.source(), host, (CarpetScriptHost) ctx.host, function, parametrizedArgs);
+            if (FoliaRuntime.plugin() != null && FoliaRuntime.isGlobalThread() && ctx.level() != null)
+            {
+                FoliaRuntime.runOnRegion(ctx.level(), ctx.origin(), call);
+            }
+            else
+            {
+                call.run();
+            }
         }
     }
 
@@ -1339,16 +1349,19 @@ public class CarpetEventServer
         {
             return;
         }
-        Iterator<ScheduledCall> eventIterator = scheduledCalls.iterator();
         List<ScheduledCall> currentCalls = new ArrayList<>();
-        while (eventIterator.hasNext())
+        synchronized (scheduledCalls)
         {
-            ScheduledCall call = eventIterator.next();
-            call.dueTime--;
-            if (call.dueTime <= 0)
+            Iterator<ScheduledCall> eventIterator = scheduledCalls.iterator();
+            while (eventIterator.hasNext())
             {
-                currentCalls.add(call);
-                eventIterator.remove();
+                ScheduledCall call = eventIterator.next();
+                call.dueTime--;
+                if (call.dueTime <= 0)
+                {
+                    currentCalls.add(call);
+                    eventIterator.remove();
+                }
             }
         }
         for (ScheduledCall call : currentCalls)

@@ -18,6 +18,7 @@ import carpet.script.value.NumericValue;
 import carpet.script.value.ScreenValue;
 import carpet.script.value.StringValue;
 import carpet.script.value.Value;
+import carpet.folia.FoliaRuntime;
 import carpet.script.value.ValueConversions;
 
 import java.util.ArrayList;
@@ -434,7 +435,20 @@ public class Inventories
             ItemEntity item;
             if (owner instanceof Player player)
             {
-                item = player.drop(droppedStack, false, true);
+                ItemEntity[] dropped = new ItemEntity[1];
+                if (player instanceof ServerPlayer serverPlayer)
+                {
+                    if (!FoliaRuntime.runOnPlayerAndWait(serverPlayer,
+                            target -> dropped[0] = target.drop(droppedStack, false, true)))
+                    {
+                        return Value.ZERO;
+                    }
+                }
+                else
+                {
+                    dropped[0] = player.drop(droppedStack, false, true);
+                }
+                item = dropped[0];
                 if (item == null)
                 {
                     return Value.ZERO;
@@ -448,14 +462,22 @@ public class Inventories
                 Vec3 vec3d = livingEntity.getViewVector(1.0F).normalize().scale(0.3);
                 item.setDeltaMovement(vec3d);
                 item.setDefaultPickUpDelay();
-                cc.level().addFreshEntity(item);
+                if (!FoliaRuntime.callOnRegionAndWait(cc.level(), item.blockPosition(),
+                        () -> cc.level().addFreshEntity(item), false))
+                {
+                    return Value.ZERO;
+                }
             }
             else
             {
                 Vec3 point = Vec3.atCenterOf(inventoryLocator.position());
                 item = new ItemEntity(cc.level(), point.x, point.y, point.z, droppedStack);
                 item.setDefaultPickUpDelay();
-                cc.level().addFreshEntity(item);
+                if (!FoliaRuntime.callOnRegionAndWait(cc.level(), item.blockPosition(),
+                        () -> cc.level().addFreshEntity(item), false))
+                {
+                    return Value.ZERO;
+                }
             }
             return new NumericValue(item.getItem().getCount());
         });

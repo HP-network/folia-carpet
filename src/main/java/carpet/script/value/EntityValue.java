@@ -85,12 +85,15 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -113,20 +116,87 @@ public class EntityValue extends Value
         return e == null ? Value.NULL : new EntityValue(e);
     }
 
-    private static final Map<String, EntitySelector> selectorCache = new HashMap<>();
+    private static final Map<String, EntitySelector> selectorCache = new ConcurrentHashMap<>();
 
     public static Collection<? extends Entity> getEntitiesFromSelector(CommandSourceStack source, String selector)
     {
         try
         {
             EntitySelector entitySelector = selectorCache.get(selector);
-            if (entitySelector != null)
+            if (entitySelector == null)
             {
-                return entitySelector.findEntities(source.withMaximumPermission(LevelBasedPermissionSet.OWNER));
+                entitySelector = new EntitySelectorParser(new StringReader(selector), true).parse();
+                selectorCache.put(selector, entitySelector);
             }
-            entitySelector = new EntitySelectorParser(new StringReader(selector), true).parse();
-            selectorCache.put(selector, entitySelector);
-            return entitySelector.findEntities(source.withMaximumPermission(LevelBasedPermissionSet.OWNER));
+            CommandSourceStack permittedSource = source.withMaximumPermission(LevelBasedPermissionSet.OWNER);
+            final EntitySelector parsedSelector = entitySelector;
+            if (FoliaRuntime.plugin() != null && source.getLevel() instanceof ServerLevel level
+                    && selector.equals("@a"))
+            {
+                return FoliaRuntime.allEntities(level).stream()
+                        .filter(entity -> entity instanceof ServerPlayer && entity.isAlive())
+                        .toList();
+            }
+            if (FoliaRuntime.plugin() != null && source.getLevel() instanceof ServerLevel level
+                    && (selector.equals("@e") || selector.matches("@e\\[type=[^,\\]]+\\]")))
+            {
+                String descriptor = selector.equals("@e") ? "*" : selector.substring(8, selector.length() - 1);
+                if (descriptor.startsWith("minecraft:"))
+                {
+                    descriptor = descriptor.substring("minecraft:".length());
+                }
+                EntityClassDescriptor typeDescriptor = getEntityDescriptor(descriptor, source.getServer());
+                List<Entity> matches = new ArrayList<>();
+                for (Entity entity : FoliaRuntime.allEntities(level))
+                {
+                    Entity matching = typeDescriptor.directType.tryCast(entity);
+                    if (matching != null && typeDescriptor.filteringPredicate.test(matching))
+                    {
+                        matches.add(matching);
+                    }
+                }
+                return matches;
+            }
+            if (FoliaRuntime.plugin() != null && selector.startsWith("@e") && !selector.contains("limit="))
+            {
+                Map<UUID, Entity> found = new LinkedHashMap<>();
+                List<net.minecraft.world.level.ChunkPos> regions = new ArrayList<>();
+                Set<Long> seenChunks = new HashSet<>();
+                net.minecraft.world.level.ChunkPos sourceChunk = new net.minecraft.world.level.ChunkPos(BlockPos.containing(source.getPosition()));
+                seenChunks.add(sourceChunk.toLong());
+                regions.add(sourceChunk);
+                if (source.getLevel() instanceof ServerLevel level)
+                {
+                    for (Entity entity : FoliaRuntime.allEntities(level))
+                    {
+                        net.minecraft.world.level.ChunkPos chunk = new net.minecraft.world.level.ChunkPos(entity.blockPosition());
+                        if (seenChunks.add(chunk.toLong()))
+                        {
+                            regions.add(chunk);
+                        }
+                    }
+                    for (net.minecraft.world.level.ChunkPos chunk : regions)
+                    {
+                        List<? extends Entity> matches = FoliaRuntime.callOnRegionAndWait(level, chunk.getWorldPosition(),
+                                () -> {
+                                    try
+                                    {
+                                        return new ArrayList<>(parsedSelector.findEntities(permittedSource));
+                                    }
+                                    catch (CommandSyntaxException ignored)
+                                    {
+                                        return List.of();
+                                    }
+                                }, List.of());
+                        for (Entity match : matches)
+                        {
+                            found.putIfAbsent(match.getUUID(), match);
+                        }
+                    }
+                    return found.values();
+                }
+            }
+            return parsedSelector.findEntities(permittedSource);
         }
         catch (CommandSyntaxException e)
         {
@@ -404,7 +474,9 @@ public class EntityValue extends Value
         }
         try
         {
-            return featureAccessors.get(what).apply(getEntity(), arg);
+            Entity target = getEntity();
+            return FoliaRuntime.callOnEntityAndWait(target,
+                    entity -> featureAccessors.get(what).apply(entity, arg), Value.NULL);
         }
         catch (NullPointerException npe)
         {
@@ -880,7 +952,9 @@ public class EntityValue extends Value
         }
         try
         {
-            featureModifiers.get(what).accept(getEntity(), toWhat);
+            Entity target = getEntity();
+            BiConsumer<Entity, Value> modifier = featureModifiers.get(what);
+            FoliaRuntime.runOnEntity(target, entity -> modifier.accept(entity, toWhat));
         }
         catch (NullPointerException npe)
         {

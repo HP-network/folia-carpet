@@ -6,6 +6,7 @@ import carpet.script.exception.ThrowStatement;
 import carpet.script.exception.Throwables;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.EquipmentInventory;
+import carpet.folia.FoliaRuntime;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
@@ -177,6 +178,16 @@ public class NBTSerializableValue extends Value implements ContainerValueInterfa
     }
 
     public static Container getInventoryAt(ServerLevel world, BlockPos blockPos)
+    {
+        if (FoliaRuntime.plugin() != null)
+        {
+            return FoliaRuntime.callOnRegionAndWait(world, blockPos,
+                    () -> getInventoryAtUnsafe(world, blockPos), null);
+        }
+        return getInventoryAtUnsafe(world, blockPos);
+    }
+
+    private static Container getInventoryAtUnsafe(ServerLevel world, BlockPos blockPos)
     {
         Container inventory = null;
         BlockState blockState = world.getBlockState(blockPos);

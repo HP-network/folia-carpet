@@ -7,6 +7,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 
 import java.util.Collection;
@@ -16,6 +19,9 @@ import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.ArrayList;
+import java.util.List;
 
 /** State shared by the Paper plugin loader and transformed server classes. */
 public final class FoliaRuntime
@@ -112,6 +118,416 @@ public final class FoliaRuntime
         }
     }
 
+    /** Returns whether an entity may be accessed by the current Folia thread. */
+    public static boolean isOwnedByCurrentRegion(Entity entity)
+    {
+        if (entity == null)
+        {
+            return false;
+        }
+        try
+        {
+            if (entity instanceof ServerPlayer player)
+            {
+                org.bukkit.entity.Player bukkitPlayer = Bukkit.getPlayer(player.getUUID());
+                return bukkitPlayer != null && Bukkit.isOwnedByCurrentRegion(bukkitPlayer);
+            }
+            return entity.level() instanceof ServerLevel level
+                    && isCurrentRegion(level, entity.blockPosition());
+        }
+        catch (Throwable ignored)
+        {
+            return false;
+        }
+    }
+
+    /** Returns whether the current thread is Folia's global scheduler thread. */
+    public static boolean isGlobalThread()
+    {
+        try
+        {
+            return Bukkit.isGlobalTickThread()
+                    || io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread();
+        }
+        catch (Throwable ignored)
+        {
+            try
+            {
+                return io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread();
+            }
+            catch (Throwable ignoredAgain)
+            {
+                return false;
+            }
+        }
+    }
+
+    private static boolean isCurrentRegion(ServerLevel level, BlockPos pos)
+    {
+        if (level == null || pos == null)
+        {
+            return false;
+        }
+        try
+        {
+            io.papermc.paper.threadedregions.RegionizedWorldData current =
+                    io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionizedWorldData();
+            return current != null && current.world == level
+                    && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, pos);
+        }
+        catch (Throwable ignored)
+        {
+            return false;
+        }
+    }
+
+    /** Runs work for a world position on the region that owns that position. */
+    public static void runOnRegion(ServerLevel level, BlockPos pos, Runnable action)
+    {
+        if (level == null || pos == null || action == null)
+        {
+            return;
+        }
+        Plugin owner = plugin();
+        org.bukkit.World world = level.getWorld();
+        if (owner == null || world == null)
+        {
+            return;
+        }
+        try
+        {
+            ChunkPos chunk = new ChunkPos(pos);
+            if (isCurrentRegion(level, pos))
+            {
+                action.run();
+                return;
+            }
+            scheduleRegionTask(owner, world, chunk, action, () -> {});
+        }
+        catch (Throwable ignored)
+        {
+            // A region can retire while a command is being dispatched.
+        }
+    }
+
+    /** Runs world-position work synchronously unless called from the global region. */
+    public static boolean runOnRegionAndWait(ServerLevel level, BlockPos pos, Runnable action)
+    {
+        if (level == null || pos == null || action == null)
+        {
+            return false;
+        }
+        Plugin owner = plugin();
+        org.bukkit.World world = level.getWorld();
+        if (owner == null || world == null)
+        {
+            return false;
+        }
+        try
+        {
+            ChunkPos chunk = new ChunkPos(pos);
+            if (isCurrentRegion(level, pos))
+            {
+                action.run();
+                return true;
+            }
+            if (isGlobalThread())
+            {
+                runOnRegion(level, pos, action);
+                return false;
+            }
+            CompletableFuture<Boolean> completed = new CompletableFuture<>();
+            scheduleRegionTask(owner, world, chunk, () ->
+            {
+                try
+                {
+                    action.run();
+                    completed.complete(true);
+                }
+                catch (Throwable error)
+                {
+                    completed.completeExceptionally(error);
+                }
+            }, () -> completed.complete(false));
+            return completed.get(5, TimeUnit.SECONDS);
+        }
+        catch (Throwable ignored)
+        {
+            return false;
+        }
+    }
+
+    /** Reads or mutates world state on its owning region and returns a fallback on async dispatch. */
+    public static <T> T callOnRegionAndWait(ServerLevel level, BlockPos pos,
+                                            Supplier<T> action, T fallback)
+    {
+        if (level == null || pos == null || action == null)
+        {
+            return fallback;
+        }
+        Plugin owner = plugin();
+        org.bukkit.World world = level.getWorld();
+        if (owner == null || world == null)
+        {
+            return fallback;
+        }
+        try
+        {
+            ChunkPos chunk = new ChunkPos(pos);
+            if (isCurrentRegion(level, pos))
+            {
+                return action.get();
+            }
+            if (isGlobalThread())
+            {
+                runOnRegion(level, pos, action::get);
+                return fallback;
+            }
+            CompletableFuture<T> completed = new CompletableFuture<>();
+            scheduleRegionTask(owner, world, chunk, () ->
+            {
+                try
+                {
+                    completed.complete(action.get());
+                }
+                catch (Throwable error)
+                {
+                    completed.completeExceptionally(error);
+                }
+            }, () -> completed.complete(fallback));
+            return completed.get(5, TimeUnit.SECONDS);
+        }
+        catch (Throwable ignored)
+        {
+            return fallback;
+        }
+    }
+
+    private static void scheduleRegionTask(Plugin owner, org.bukkit.World world, ChunkPos chunk,
+                                           Runnable action, Runnable failure)
+    {
+        try
+        {
+            if (world.isChunkLoaded(chunk.x, chunk.z))
+            {
+                Bukkit.getRegionScheduler().execute(owner, world, chunk.x, chunk.z, action);
+                return;
+            }
+            world.getChunkAtAsync(chunk.x, chunk.z, true, false, chunkResult ->
+            {
+                if (chunkResult == null)
+                {
+                    failure.run();
+                    return;
+                }
+                try
+                {
+                    Bukkit.getRegionScheduler().execute(owner, world, chunk.x, chunk.z, action);
+                }
+                catch (Throwable error)
+                {
+                    failure.run();
+                }
+            });
+        }
+        catch (Throwable error)
+        {
+            failure.run();
+        }
+    }
+
+    /** Returns the server's entity index without restricting the result to the current region. */
+    public static List<Entity> allEntities(ServerLevel level)
+    {
+        if (level == null)
+        {
+            return List.of();
+        }
+        try
+        {
+            if (level.getEntities() instanceof ca.spottedleaf.moonrise.patches.chunk_system.level.entity.EntityLookup lookup)
+            {
+                List<Entity> result = new ArrayList<>();
+                lookup.getAllMapped().forEach(entity -> result.add((Entity) entity));
+                return result;
+            }
+        }
+        catch (Throwable ignored)
+        {
+        }
+        try
+        {
+            List<Entity> result = new ArrayList<>();
+            level.getAllEntities().forEach(result::add);
+            return result;
+        }
+        catch (Throwable ignored)
+        {
+            return List.of();
+        }
+    }
+
+    /** Runs entity-owned work on the entity's current Folia region. */
+    public static void runOnEntity(Entity entity, Consumer<Entity> action)
+    {
+        if (entity == null || action == null)
+        {
+            return;
+        }
+        if (entity instanceof ServerPlayer player)
+        {
+            runOnPlayer(player, action::accept);
+            return;
+        }
+        Plugin owner = plugin();
+        if (owner == null)
+        {
+            action.accept(entity);
+            return;
+        }
+        try
+        {
+            if (isOwnedByCurrentRegion(entity))
+            {
+                action.accept(entity);
+                return;
+            }
+            if (!entity.getBukkitEntity().getScheduler().execute(owner,
+                    () -> action.accept(entity), () -> {}, 1L))
+            {
+                return;
+            }
+        }
+        catch (Throwable ignored)
+        {
+            // Entities can be removed or unload while a task is being queued.
+        }
+    }
+
+    /** Runs entity-owned work synchronously when the caller needs vanilla ordering. */
+    public static boolean runOnEntityAndWait(Entity entity, Consumer<Entity> action)
+    {
+        if (entity == null || action == null)
+        {
+            return false;
+        }
+        if (entity instanceof ServerPlayer player)
+        {
+            return runOnPlayerAndWait(player, action::accept);
+        }
+        Plugin owner = plugin();
+        if (owner == null || isOwnedByCurrentRegion(entity))
+        {
+            try
+            {
+                action.accept(entity);
+                return true;
+            }
+            catch (Throwable ignored)
+            {
+                return false;
+            }
+        }
+        try
+        {
+            CompletableFuture<Boolean> completed = new CompletableFuture<>();
+            if (!entity.getBukkitEntity().getScheduler().execute(owner,
+                    () -> {
+                        try
+                        {
+                            action.accept(entity);
+                            completed.complete(true);
+                        }
+                        catch (Throwable error)
+                        {
+                            completed.completeExceptionally(error);
+                        }
+                    }, () -> completed.complete(false), 1L))
+            {
+                return false;
+            }
+            return completed.get(5, TimeUnit.SECONDS);
+        }
+        catch (Throwable ignored)
+        {
+            return false;
+        }
+    }
+
+    /** Reads entity-owned state on its region and returns it to the caller. */
+    public static <T> T callOnEntityAndWait(Entity entity, Function<Entity, T> action, T fallback)
+    {
+        if (entity == null || action == null)
+        {
+            return fallback;
+        }
+        // Offline/fake players are owned by their region, but their state is
+        // also intentionally exposed to global Carpet commands. Reads do not
+        // enqueue work and, importantly, never block the global region.
+        if (entity instanceof carpet.patches.EntityPlayerMPFake && isGlobalThread())
+        {
+            try
+            {
+                return action.apply(entity);
+            }
+            catch (Throwable ignored)
+            {
+                return fallback;
+            }
+        }
+        if (entity instanceof ServerPlayer player)
+        {
+            try
+            {
+                CompletableFuture<T> result = new CompletableFuture<>();
+                if (!runOnPlayerAndWait(player, target -> result.complete(action.apply(target))))
+                {
+                    return fallback;
+                }
+                return result.getNow(fallback);
+            }
+            catch (Throwable ignored)
+            {
+                return fallback;
+            }
+        }
+        Plugin owner = plugin();
+        if (owner == null || isOwnedByCurrentRegion(entity))
+        {
+            try
+            {
+                return action.apply(entity);
+            }
+            catch (Throwable ignored)
+            {
+                return fallback;
+            }
+        }
+        try
+        {
+            CompletableFuture<T> completed = new CompletableFuture<>();
+            if (!entity.getBukkitEntity().getScheduler().execute(owner,
+                    () -> {
+                        try
+                        {
+                            completed.complete(action.apply(entity));
+                        }
+                        catch (Throwable error)
+                        {
+                            completed.completeExceptionally(error);
+                        }
+                    }, () -> completed.completeExceptionally(new IllegalStateException("Entity scheduler retired")), 1L))
+            {
+                return fallback;
+            }
+            return completed.get(5, TimeUnit.SECONDS);
+        }
+        catch (Throwable ignored)
+        {
+            return fallback;
+        }
+    }
+
     /** Sends a system message on the player's region thread. */
     public static void sendSystemMessage(ServerPlayer player, Component message)
     {
@@ -173,7 +589,7 @@ public final class FoliaRuntime
         }
         try
         {
-            if (Bukkit.isGlobalTickThread())
+            if (isGlobalThread())
             {
                 action.run();
             }
@@ -258,6 +674,13 @@ public final class FoliaRuntime
         }
         try
         {
+            // The global region must never wait for a region task: Folia needs
+            // the global thread to keep driving the region scheduler.
+            if (isGlobalThread())
+            {
+                runOnPlayer(player, action);
+                return false;
+            }
             if (player instanceof carpet.patches.EntityPlayerMPFake fake)
             {
                 return runOnFakePlayerAndWait(fake, action);
@@ -318,6 +741,11 @@ public final class FoliaRuntime
     private static boolean runOnFakePlayerAndWait(carpet.patches.EntityPlayerMPFake player,
                                                    Consumer<ServerPlayer> action)
     {
+        if (isGlobalThread())
+        {
+            runOnFakePlayer(player, action);
+            return false;
+        }
         Plugin owner = plugin();
         org.bukkit.World world = player.level().getWorld();
         if (owner == null || world == null)

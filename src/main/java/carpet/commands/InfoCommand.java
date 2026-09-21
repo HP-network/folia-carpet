@@ -1,6 +1,7 @@
 package carpet.commands;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.utils.BlockInfo;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
@@ -68,6 +69,11 @@ public class InfoCommand
 
     private static int infoBlock(CommandSourceStack source, BlockPos pos, String grep)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            FoliaRuntime.runOnRegion(source.getLevel(), pos, () -> infoBlock(source, pos, grep));
+            return 1;
+        }
         if (!Commands.LEVEL_GAMEMASTERS.check(source.permissions())) {
 
             if (!source.getLevel().hasChunkAt(pos)) {

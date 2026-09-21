@@ -59,75 +59,85 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
     {
-
         ServerLevel worldIn = server == null ? null : server.getLevel(dimensionId);
         if (worldIn == null || worldIn.getWorld() == null)
         {
             return false;
         }
-        server.services().nameToIdCache().resolveOfflineUsers(false);
-        GameProfile gameprofile;
 
-            UUID uuid = OldUsersConverter.convertMobOwnerIfNecessary(server, username);
-
-            if (uuid == null && CarpetSettings.allowSpawningOfflinePlayers) {
-                server.services().nameToIdCache().resolveOfflineUsers(server.isDedicatedServer() && server.usesAuthentication());
-                uuid = UUIDUtil.createOfflinePlayerUUID(username);
-            }
-            if (uuid == null) {
-                return false;
-            }
-            gameprofile = new GameProfile(uuid, username);
-
-        String name = gameprofile.name();
-        spawning.add(name);
-
-        GameProfile fetchedProfile = null;
-        try
+        // Profile lookup can block on Mojang's session service. Never do it on
+        // Folia's global region; the actual player construction is dispatched
+        // to the target region after the lookup completes.
+        String name = username;
+        if (!spawning.add(name))
         {
-            fetchedProfile = fetchGameProfileByName(server, name)
-                    .get(5, java.util.concurrent.TimeUnit.SECONDS);
+            return false;
         }
-        catch (Exception ignored) {}
-
-        GameProfile finalProfile;
-        if (fetchedProfile != null && !fetchedProfile.name().isEmpty()
-                && fetchedProfile.properties().containsKey("textures"))
-        {
-
-            finalProfile = fetchedProfile;
-        }
-        else
-        {
-            finalProfile = gameprofile;
-        }
-        try
-        {
-            net.minecraft.world.level.ChunkPos cpos = new net.minecraft.world.level.ChunkPos(
-                    net.minecraft.core.BlockPos.containing(pos));
-            org.bukkit.plugin.Plugin plugin = carpet.folia.FoliaRuntime.plugin();
-            org.bukkit.Bukkit.getRegionScheduler().execute(
-                    plugin,
-                    worldIn.getWorld(),
-                    cpos.x, cpos.z,
-                    () -> {
-                        try
-                        {
-                            spawnFake(server, worldIn, finalProfile, pos, yaw, pitch, dimensionId, gamemode, flying);
-                        }
-                        finally
-                        {
-                            spawning.remove(name);
-                        }
+        CompletableFuture.supplyAsync(() -> resolveGameProfile(server, name))
+                .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .exceptionally(ignored -> null)
+                .thenAccept(profile ->
+                {
+                    if (profile == null)
+                    {
+                        spawning.remove(name);
+                        return;
                     }
-            );
-        }
-        catch (Throwable e)
-        {
-            spawning.remove(name);
-            CarpetSettings.LOG.error("[FoliaCarpet] Failed to schedule fake player " + name, e);
-        }
+                    try
+                    {
+                        BlockPos target = BlockPos.containing(pos);
+                        carpet.folia.FoliaRuntime.runOnRegion(worldIn, target, () ->
+                        {
+                            try
+                            {
+                                spawnFake(server, worldIn, profile, pos, yaw, pitch, dimensionId, gamemode, flying);
+                            }
+                            catch (Throwable error)
+                            {
+                                CarpetSettings.LOG.error("[FoliaCarpet] Failed to spawn fake player " + name, error);
+                            }
+                            finally
+                            {
+                                spawning.remove(name);
+                            }
+                        });
+                    }
+                    catch (Throwable error)
+                    {
+                        spawning.remove(name);
+                        CarpetSettings.LOG.error("[FoliaCarpet] Failed to schedule fake player " + name, error);
+                    }
+                });
         return true;
+    }
+
+    private static GameProfile resolveGameProfile(MinecraftServer server, String name)
+    {
+        try
+        {
+            server.services().nameToIdCache().resolveOfflineUsers(false);
+            UUID uuid = OldUsersConverter.convertMobOwnerIfNecessary(server, name);
+            if (uuid == null && CarpetSettings.allowSpawningOfflinePlayers)
+            {
+                server.services().nameToIdCache().resolveOfflineUsers(server.isDedicatedServer() && server.usesAuthentication());
+                uuid = UUIDUtil.createOfflinePlayerUUID(name);
+            }
+            if (uuid == null)
+            {
+                return null;
+            }
+            GameProfile fallback = new GameProfile(uuid, name);
+            GameProfile fetched = fetchGameProfileByName(server, name).get();
+            if (fetched != null && !fetched.name().isEmpty() && fetched.properties().containsKey("textures"))
+            {
+                return fetched;
+            }
+            return fallback;
+        }
+        catch (Throwable ignored)
+        {
+            return null;
+        }
     }
 
     private static void spawnFake(MinecraftServer server, ServerLevel worldIn, GameProfile current, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)

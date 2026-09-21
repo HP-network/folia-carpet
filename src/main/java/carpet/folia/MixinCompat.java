@@ -172,6 +172,10 @@ public final class MixinCompat
             return;
         }
         org.bukkit.plugin.Plugin plugin = FoliaRuntime.plugin();
+        if (plugin == null)
+        {
+            return;
+        }
         for (ServerPlayer player : server.getPlayerList().getPlayers())
         {
             EntityPlayerActionPack actionPack = player_getActionPack(player);
@@ -184,28 +188,17 @@ public final class MixinCompat
             if (hasActions || noClip)
             {
 
-                try
-                {
-                    org.bukkit.World bukkitWorld = player.level().getWorld();
-                    net.minecraft.world.level.ChunkPos cpos = new net.minecraft.world.level.ChunkPos(
-                            net.minecraft.core.BlockPos.containing(player.position()));
-                    final boolean fNoClip = noClip;
-                    org.bukkit.Bukkit.getRegionScheduler().execute(plugin, bukkitWorld, cpos.x, cpos.z, () -> {
-                        if (fNoClip)
-                        {
-
-                            player.noPhysics = true;
-                        }
-                        if (hasActions && actionPack != null)
-                        {
-                            actionPack.onUpdate();
-                        }
-                    });
-                }
-                catch (Throwable ignored)
-                {
-
-                }
+                final boolean fNoClip = noClip;
+                FoliaRuntime.runOnPlayer(player, target -> {
+                    if (fNoClip)
+                    {
+                        target.noPhysics = true;
+                    }
+                    if (hasActions && actionPack != null)
+                    {
+                        actionPack.onUpdate();
+                    }
+                });
             }
         }
     }

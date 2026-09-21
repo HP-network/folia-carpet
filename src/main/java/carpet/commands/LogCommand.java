@@ -1,6 +1,7 @@
 package carpet.commands;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.logging.Logger;
 import carpet.logging.LoggerRegistry;
 import carpet.utils.CommandHelper;
@@ -18,6 +19,7 @@ import java.util.Map;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import java.util.Arrays;
 
@@ -135,6 +137,15 @@ public class LogCommand
     }
     private static int unsubFromAll(CommandSourceStack source, String player_name)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            ServerPlayer target = source.getServer().getPlayerList().getPlayerByName(player_name);
+            if (target != null)
+            {
+                FoliaRuntime.runOnPlayer(target, ignored -> unsubFromAll(source, player_name));
+                return 1;
+            }
+        }
         Player player = source.getServer().getPlayerList().getPlayerByName(player_name);
         if (player == null)
         {
@@ -150,6 +161,15 @@ public class LogCommand
     }
     private static int unsubFromLogger(CommandSourceStack source, String player_name, String logname)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            ServerPlayer target = source.getServer().getPlayerList().getPlayerByName(player_name);
+            if (target != null)
+            {
+                FoliaRuntime.runOnPlayer(target, ignored -> unsubFromLogger(source, player_name, logname));
+                return 1;
+            }
+        }
         Player player = source.getServer().getPlayerList().getPlayerByName(player_name);
         if (player == null)
         {
@@ -168,6 +188,15 @@ public class LogCommand
 
     private static int toggleSubscription(CommandSourceStack source, String player_name, String logName)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            ServerPlayer target = source.getServer().getPlayerList().getPlayerByName(player_name);
+            if (target != null)
+            {
+                FoliaRuntime.runOnPlayer(target, ignored -> toggleSubscription(source, player_name, logName));
+                return 1;
+            }
+        }
         Player player = source.getServer().getPlayerList().getPlayerByName(player_name);
         if (player == null)
         {
@@ -192,6 +221,15 @@ public class LogCommand
     }
     private static int subscribePlayer(CommandSourceStack source, String player_name, String logname, String option)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            ServerPlayer target = source.getServer().getPlayerList().getPlayerByName(player_name);
+            if (target != null)
+            {
+                FoliaRuntime.runOnPlayer(target, ignored -> subscribePlayer(source, player_name, logname, option));
+                return 1;
+            }
+        }
         Player player = source.getServer().getPlayerList().getPlayerByName(player_name);
         if (player == null)
         {

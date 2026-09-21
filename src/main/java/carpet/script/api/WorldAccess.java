@@ -170,9 +170,19 @@ public class WorldAccess
         }
         if (params.get(0) instanceof final BlockValue bv)
         {
+            if (FoliaRuntime.plugin() != null && bv.getPos() != null && cc.level() != null)
+            {
+                return BooleanValue.of(FoliaRuntime.callOnRegionAndWait(cc.level(), bv.getPos(),
+                        () -> test.test(bv.getBlockState(), bv.getPos()), false));
+            }
             return BooleanValue.of(test.test(bv.getBlockState(), bv.getPos()));
         }
         BlockValue block = BlockArgument.findIn(cc, params, 0).block;
+        if (FoliaRuntime.plugin() != null)
+        {
+            return BooleanValue.of(FoliaRuntime.callOnRegionAndWait(cc.level(), block.getPos(),
+                    () -> test.test(block.getBlockState(), block.getPos()), false));
+        }
         return BooleanValue.of(test.test(block.getBlockState(), block.getPos()));
     }
 
@@ -190,9 +200,19 @@ public class WorldAccess
         }
         if (params.get(0) instanceof final BlockValue bv)
         {
+            if (FoliaRuntime.plugin() != null && bv.getPos() != null)
+            {
+                return StringValue.of(FoliaRuntime.callOnRegionAndWait(cc.level(), bv.getPos(),
+                        () -> test.apply(bv.getBlockState(), bv.getPos()), "unknown"));
+            }
             return StringValue.of(test.apply(bv.getBlockState(), bv.getPos()));
         }
         BlockValue block = BlockArgument.findIn(cc, params, 0).block;
+        if (FoliaRuntime.plugin() != null)
+        {
+            return StringValue.of(FoliaRuntime.callOnRegionAndWait(cc.level(), block.getPos(),
+                    () -> test.apply(block.getBlockState(), block.getPos()), "unknown"));
+        }
         return StringValue.of(test.apply(block.getBlockState(), block.getPos()));
     }
 
@@ -212,6 +232,11 @@ public class WorldAccess
         {
             try
             {
+                if (FoliaRuntime.plugin() != null && bv.getPos() != null)
+                {
+                    return FoliaRuntime.callOnRegionAndWait(cc.level(), bv.getPos(),
+                            () -> test.apply(bv.getBlockState(), bv.getPos(), cc.level()), Value.FALSE);
+                }
                 return test.apply(bv.getBlockState(), bv.getPos(), cc.level());
             }
             catch (NullPointerException ignored)
@@ -220,6 +245,11 @@ public class WorldAccess
             }
         }
         BlockValue block = BlockArgument.findIn(cc, params, 0).block;
+        if (FoliaRuntime.plugin() != null)
+        {
+            return FoliaRuntime.callOnRegionAndWait(cc.level(), block.getPos(),
+                    () -> test.apply(block.getBlockState(), block.getPos(), cc.level()), Value.FALSE);
+        }
         return test.apply(block.getBlockState(), block.getPos(), cc.level());
     }
 
@@ -294,27 +324,26 @@ public class WorldAccess
             }
             BlockArgument locator = BlockArgument.findIn(cc, lv, 0, false);
             BlockPos pos = locator.block.getPos();
-            PoiManager store = cc.level().getPoiManager();
+            ServerLevel world = cc.level();
             Registry<PoiType> poiReg = cc.registry(Registries.POINT_OF_INTEREST_TYPE);
             if (lv.size() == locator.offset)
             {
-                Optional<Holder<PoiType>> foo = store.getType(pos);
-                if (foo.isEmpty())
+                return FoliaRuntime.callOnRegionAndWait(world, pos, () ->
                 {
-                    return Value.NULL;
-                }
-                PoiType poiType = foo.get().value();
-
-                PoiRecord poi = store.getInRange(
-                        type -> type.value() == poiType,
-                        pos,
-                        1,
-                        PoiManager.Occupancy.ANY
-                ).filter(p -> p.getPos().equals(pos)).findFirst().orElse(null);
-                return poi == null ? Value.NULL : ListValue.of(
-                        ValueConversions.of(poiReg.getKey(poi.getPoiType().value())),
-                        new NumericValue(poiType.maxTickets() - Vanilla.PoiRecord_getFreeTickets(poi))
-                );
+                    PoiManager store = world.getPoiManager();
+                    Optional<Holder<PoiType>> foo = store.getType(pos);
+                    if (foo.isEmpty())
+                    {
+                        return Value.NULL;
+                    }
+                    PoiType poiType = foo.get().value();
+                    PoiRecord poi = store.getInRange(type -> type.value() == poiType, pos, 1, PoiManager.Occupancy.ANY)
+                            .filter(p -> p.getPos().equals(pos)).findFirst().orElse(null);
+                    return poi == null ? Value.NULL : ListValue.of(
+                            ValueConversions.of(poiReg.getKey(poi.getPoiType().value())),
+                            new NumericValue(poiType.maxTickets() - Vanilla.PoiRecord_getFreeTickets(poi))
+                    );
+                }, Value.NULL);
             }
             int radius = NumericValue.asNumber(lv.get(locator.offset)).getInt();
             if (radius < 0)
@@ -356,16 +385,24 @@ public class WorldAccess
                     }
                 }
             }
-            Stream<PoiRecord> pois = inColumn ?
-                    store.getInSquare(condition, pos, radius, status) :
-                    store.getInRange(condition, pos, radius, status);
-            return ListValue.wrap(pois.sorted(Comparator.comparingDouble(p -> p.getPos().distSqr(pos))).map(p ->
-                    ListValue.of(
-                            ValueConversions.of(poiReg.getKey(p.getPoiType().value())),
-                            new NumericValue(p.getPoiType().value().maxTickets() - Vanilla.PoiRecord_getFreeTickets(p)),
-                            ValueConversions.of(p.getPos())
-                    )
-            ));
+            final Predicate<Holder<PoiType>> finalCondition = condition;
+            final PoiManager.Occupancy finalStatus = status;
+            final boolean finalInColumn = inColumn;
+            final int finalRadius = radius;
+            return FoliaRuntime.callOnRegionAndWait(world, pos, () ->
+            {
+                PoiManager store = world.getPoiManager();
+                Stream<PoiRecord> pois = finalInColumn ?
+                        store.getInSquare(finalCondition, pos, finalRadius, finalStatus) :
+                        store.getInRange(finalCondition, pos, finalRadius, finalStatus);
+                return ListValue.wrap(pois.sorted(Comparator.comparingDouble(p -> p.getPos().distSqr(pos))).map(p ->
+                        ListValue.of(
+                                ValueConversions.of(poiReg.getKey(p.getPoiType().value())),
+                                new NumericValue(p.getPoiType().value().maxTickets() - Vanilla.PoiRecord_getFreeTickets(p)),
+                                ValueConversions.of(p.getPos())
+                        )
+                ));
+            }, ListValue.of());
         });
 
         expression.addContextFunction("set_poi", -1, (c, t, lv) ->
@@ -382,15 +419,18 @@ public class WorldAccess
                 throw new InternalExpressionException("'set_poi' requires the new poi type or null, after position argument");
             }
             Value poi = lv.get(locator.offset);
-            PoiManager store = cc.level().getPoiManager();
             if (poi.isNull())
             {
-                if (store.getType(pos).isEmpty())
+                return FoliaRuntime.callOnRegionAndWait(cc.level(), pos, () ->
                 {
-                    return Value.FALSE;
-                }
-                store.remove(pos);
-                return Value.TRUE;
+                    PoiManager store = cc.level().getPoiManager();
+                    if (store.getType(pos).isEmpty())
+                    {
+                        return Value.FALSE;
+                    }
+                    store.remove(pos);
+                    return Value.TRUE;
+                }, Value.FALSE);
             }
             String poiTypeString = poi.getString().toLowerCase(Locale.ROOT);
             Identifier resource = InputValidator.identifierOf(poiTypeString);
@@ -408,24 +448,29 @@ public class WorldAccess
                     throw new InternalExpressionException("Occupancy cannot be negative");
                 }
             }
-            if (store.getType(pos).isPresent())
+            final int finalOccupancy = occupancy;
+            return FoliaRuntime.callOnRegionAndWait(cc.level(), pos, () ->
             {
-                store.remove(pos);
-            }
-            store.add(pos, holder);
+                PoiManager store = cc.level().getPoiManager();
+                if (store.getType(pos).isPresent())
+                {
+                    store.remove(pos);
+                }
+                store.add(pos, holder);
 
-            if (occupancy > 0)
-            {
-                int finalO = occupancy;
-                store.getInSquare(tt -> tt.value() == type, pos, 1, PoiManager.Occupancy.ANY
-                ).filter(p -> p.getPos().equals(pos)).findFirst().ifPresent(p -> {
-                    for (int i = 0; i < finalO; i++)
-                    {
-                        Vanilla.PoiRecord_callAcquireTicket(p);
-                    }
-                });
-            }
-            return Value.TRUE;
+                if (finalOccupancy > 0)
+                {
+                    store.getInSquare(tt -> tt.value() == type, pos, 1, PoiManager.Occupancy.ANY)
+                            .filter(p -> p.getPos().equals(pos)).findFirst().ifPresent(p ->
+                            {
+                                for (int i = 0; i < finalOccupancy; i++)
+                                {
+                                    Vanilla.PoiRecord_callAcquireTicket(p);
+                                }
+                            });
+                }
+                return Value.TRUE;
+            }, Value.FALSE);
         });
 
         expression.addContextFunction("weather", -1, (c, t, lv) -> {
@@ -437,32 +482,35 @@ public class WorldAccess
             }
 
             Value weather = lv.get(0);
-            ServerLevelData worldProperties = Vanilla.ServerLevel_getWorldProperties(world);
+            String weatherName = weather.getString().toLowerCase(Locale.ROOT);
+            if (!weatherName.equals("clear") && !weatherName.equals("rain") && !weatherName.equals("thunder"))
+            {
+                throw new InternalExpressionException("Weather can only be 'clear', 'rain' or 'thunder'");
+            }
             if (lv.size() == 1)
             {
-                return new NumericValue(switch (weather.getString().toLowerCase(Locale.ROOT))
+                ServerLevelData worldProperties = Vanilla.ServerLevel_getWorldProperties(world);
+                return new NumericValue(switch (weatherName)
                 {
                     case "clear" -> worldProperties.getClearWeatherTime();
                     case "rain" -> world.isRaining() ? worldProperties.getRainTime() : 0;
                     case "thunder" -> world.isThundering() ? worldProperties.getThunderTime() : 0;
-                    default -> throw new InternalExpressionException("Weather can only be 'clear', 'rain' or 'thunder'");
+                    default -> 0;
                 });
             }
             if (lv.size() == 2)
             {
                 int ticks = NumericValue.asNumber(lv.get(1), "tick_time in 'weather'").getInt();
-                switch (weather.getString().toLowerCase(Locale.ROOT))
+                FoliaRuntime.runOnGlobal(() ->
                 {
-                    case "clear" -> world.setWeatherParameters(ticks, 0, false, false);
-                    case "rain" -> world.setWeatherParameters(0, ticks, true, false);
-                    case "thunder" -> world.setWeatherParameters(
-                            0,
-                            ticks,
-                            true,
-                            true
-                    );
-                    default -> throw new InternalExpressionException("Weather can only be 'clear', 'rain' or 'thunder'");
-                }
+                    switch (weatherName)
+                    {
+                        case "clear" -> world.setWeatherParameters(ticks, 0, false, false);
+                        case "rain" -> world.setWeatherParameters(0, ticks, true, false);
+                        case "thunder" -> world.setWeatherParameters(0, ticks, true, true);
+                        default -> { }
+                    }
+                });
                 return NumericValue.of(ticks);
             }
             throw new InternalExpressionException("'weather' requires 0, 1 or 2 arguments");
@@ -582,7 +630,10 @@ public class WorldAccess
             BlockPos pos = locator.block.getPos();
             int x = pos.getX();
             int z = pos.getZ();
-            return new NumericValue(((CarpetContext) c).level().getChunk(x >> 4, z >> 4).getHeight(htype, x & 15, z & 15) + 1);
+            ServerLevel level = ((CarpetContext) c).level();
+            return FoliaRuntime.callOnRegionAndWait(level, pos,
+                    () -> new NumericValue(level.getChunk(x >> 4, z >> 4).getHeight(htype, x & 15, z & 15) + 1),
+                    Value.ZERO);
         });
 
         expression.addContextFunction("loaded", -1, (c, t, lv) ->
@@ -598,8 +649,12 @@ public class WorldAccess
         expression.addContextFunction("loaded_status", -1, (c, t, lv) ->
         {
             BlockPos pos = BlockArgument.findIn((CarpetContext) c, lv, 0).block.getPos();
-            LevelChunk chunk = ((CarpetContext) c).level().getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
-            return chunk == null ? Value.ZERO : new NumericValue(chunk.getFullStatus().ordinal());
+            ServerLevel level = ((CarpetContext) c).level();
+            return FoliaRuntime.callOnRegionAndWait(level, pos, () ->
+            {
+                LevelChunk chunk = level.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
+                return chunk == null ? Value.ZERO : new NumericValue(chunk.getFullStatus().ordinal());
+            }, Value.ZERO);
         });
 
         expression.addContextFunction("is_chunk_generated", -1, (c, t, lv) ->
@@ -623,8 +678,13 @@ public class WorldAccess
             {
                 forceLoad = lv.get(blockArgument.offset).getBoolean();
             }
-            ChunkAccess chunk = ((CarpetContext) c).level().getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.EMPTY, forceLoad);
-            return chunk == null ? Value.NULL : ValueConversions.of(BuiltInRegistries.CHUNK_STATUS.getKey(chunk.getPersistedStatus()));
+            ServerLevel level = ((CarpetContext) c).level();
+            final boolean requestedForceLoad = forceLoad;
+            return FoliaRuntime.callOnRegionAndWait(level, pos, () ->
+            {
+                ChunkAccess chunk = level.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.EMPTY, requestedForceLoad);
+                return chunk == null ? Value.NULL : ValueConversions.of(BuiltInRegistries.CHUNK_STATUS.getKey(chunk.getPersistedStatus()));
+            }, Value.NULL);
         });
 
         expression.addContextFunction("chunk_tickets", -1, (c, t, lv) ->
@@ -712,20 +772,17 @@ public class WorldAccess
                 return lv.get(0);
             }
             Value[] result = new Value[]{Value.NULL};
-            ((CarpetContext) c).server().executeBlocking(() ->
+            ThreadLocal<Boolean> skipUpdates = Carpet.getImpendingFillSkipUpdates();
+            boolean previous = skipUpdates.get();
+            try
             {
-                ThreadLocal<Boolean> skipUpdates = Carpet.getImpendingFillSkipUpdates();
-                boolean previous = skipUpdates.get();
-                try
-                {
-                    skipUpdates.set(true);
-                    result[0] = lv.get(0).evalValue(c, t);
-                }
-                finally
-                {
-                    skipUpdates.set(previous);
-                }
-            });
+                skipUpdates.set(true);
+                result[0] = lv.get(0).evalValue(c, t);
+            }
+            finally
+            {
+                skipUpdates.set(previous);
+            }
             return (cc, tt) -> result[0];
         });
 
@@ -736,7 +793,6 @@ public class WorldAccess
             BlockArgument targetLocator = BlockArgument.findIn(cc, lv, 0);
             BlockArgument sourceLocator = BlockArgument.findIn(cc, lv, targetLocator.offset, true);
             BlockState sourceBlockState = sourceLocator.block.getBlockState();
-            BlockState targetBlockState = world.getBlockState(targetLocator.block.getPos());
             CompoundTag data = null;
             if (lv.size() > sourceLocator.offset)
             {
@@ -794,14 +850,9 @@ public class WorldAccess
             }
             CompoundTag finalData = data;
 
-            if (sourceBlockState == targetBlockState && data == null)
-            {
-                return Value.FALSE;
-            }
             BlockState finalSourceBlockState = sourceBlockState;
             BlockPos targetPos = targetLocator.block.getPos();
-            Boolean[] result = new Boolean[]{true};
-            cc.server().executeBlocking(() ->
+            boolean updated = FoliaRuntime.callOnRegionAndWait(world, targetPos, () ->
             {
                 boolean success = world.setBlock(targetPos, finalSourceBlockState, Block.UPDATE_CLIENTS  | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS );
                 if (finalData != null)
@@ -820,9 +871,13 @@ public class WorldAccess
                         success = true;
                     }
                 }
-                result[0] = success;
-            });
-            return !result[0] ? Value.FALSE : new BlockValue(finalSourceBlockState, world, targetLocator.block.getPos());
+                if (!success)
+                {
+                    return false;
+                }
+                return true;
+            }, false);
+            return updated ? new BlockValue(finalSourceBlockState, world, targetPos) : Value.FALSE;
         });
 
         expression.addContextFunction("destroy", -1, (c, t, lv) ->
@@ -837,7 +892,6 @@ public class WorldAccess
                 return Value.FALSE;
             }
             BlockPos where = locator.block.getPos();
-            BlockEntity be = world.getBlockEntity(where);
             long how = 0;
             Item item = Items.DIAMOND_PICKAXE;
             boolean playerBreak = false;
@@ -871,7 +925,7 @@ public class WorldAccess
                             : NBTSerializableValue.parseStringOrFail(tagValue.getString()).getCompoundTag();
                 }
             }
-            ItemStack tool;
+            final ItemStack tool;
             if (tag != null)
             {
                 tool = ItemStack.CODEC.parse(regs.createSerializationContext(NbtOps.INSTANCE), tag).getOrThrow(s -> new InternalExpressionException("Failed to parse item stack data: " + s));
@@ -880,69 +934,77 @@ public class WorldAccess
             {
                 tool = new ItemStack(item, 1);
             }
-            if (playerBreak && state.getDestroySpeed(world, where) < 0.0)
+            final Item finalItem = item;
+            final boolean finalPlayerBreak = playerBreak;
+            final long finalHow = how;
+            final CompoundTag finalTag = tag;
+            return FoliaRuntime.callOnRegionAndWait(world, where, () ->
             {
-                return Value.FALSE;
-            }
-            boolean removed = world.removeBlock(where, false);
-            if (!removed)
-            {
-                return Value.FALSE;
-            }
-            world.levelEvent(null, 2001, where, Block.getId(state));
+                BlockEntity be = world.getBlockEntity(where);
+                if (finalPlayerBreak && state.getDestroySpeed(world, where) < 0.0)
+                {
+                    return Value.FALSE;
+                }
+                boolean removed = world.removeBlock(where, false);
+                if (!removed)
+                {
+                    return Value.FALSE;
+                }
+                world.levelEvent(null, 2001, where, Block.getId(state));
 
-            final MutableBoolean toolBroke = new MutableBoolean(false);
-            boolean dropLoot = true;
-            if (playerBreak)
-            {
-                boolean isUsingEffectiveTool = !state.requiresCorrectToolForDrops() || tool.isCorrectToolForDrops(state);
+                final MutableBoolean toolBroke = new MutableBoolean(false);
+                boolean dropLoot = true;
+                if (finalPlayerBreak)
+                {
+                    boolean isUsingEffectiveTool = !state.requiresCorrectToolForDrops() || tool.isCorrectToolForDrops(state);
 
-                float hardness = state.getDestroySpeed(world, where);
-                int damageAmount = 0;
-                if ((tool.is(ItemTags.PICKAXES) && hardness > 0.0) || item instanceof ShearsItem)
-                {
-                    damageAmount = 1;
-                }
-                else if (item instanceof TridentItem || tool.is(ItemTags.SWORDS))
-                {
-                    damageAmount = 2;
-                }
-                final int finalDamageAmount = damageAmount;
-                tool.hurtAndBreak(damageAmount, world, null, (i) ->  { if (finalDamageAmount > 0) toolBroke.setTrue(); } );
-                if (!isUsingEffectiveTool)
-                {
-                    dropLoot = false;
-                }
-            }
-
-            if (dropLoot)
-            {
-                if (how < 0 || (tag != null && EnchantmentHelper.getItemEnchantmentLevel(world.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SILK_TOUCH), tool) > 0))
-                {
-                    Block.popResource(world, where, new ItemStack(state.getBlock()));
-                }
-                else
-                {
-                    if (how > 0)
+                    float hardness = state.getDestroySpeed(world, where);
+                    int damageAmount = 0;
+                    if ((tool.is(ItemTags.PICKAXES) && hardness > 0.0) || finalItem instanceof ShearsItem)
                     {
-                        tool.enchant(world.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.FORTUNE), (int) how);
+                        damageAmount = 1;
                     }
-                    if (DUMMY_ENTITY == null)
+                    else if (finalItem instanceof TridentItem || tool.is(ItemTags.SWORDS))
                     {
-                        DUMMY_ENTITY = new FallingBlockEntity(EntityType.FALLING_BLOCK, null);
+                        damageAmount = 2;
                     }
-                    Block.dropResources(state, world, where, be, DUMMY_ENTITY, tool);
+                    final int finalDamageAmount = damageAmount;
+                    tool.hurtAndBreak(damageAmount, world, null, (i) ->  { if (finalDamageAmount > 0) toolBroke.setTrue(); } );
+                    if (!isUsingEffectiveTool)
+                    {
+                        dropLoot = false;
+                    }
                 }
-            }
-            if (!playerBreak)
-            {
-                return Value.TRUE;
-            }
-            if (toolBroke.booleanValue())
-            {
-                return Value.NULL;
-            }
-            return new NBTSerializableValue(() -> ItemStack.CODEC.encodeStart(regs.createSerializationContext(NbtOps.INSTANCE), tool).getOrThrow(s -> new InternalExpressionException("Failed to parse item stack data: " + s)));
+
+                if (dropLoot)
+                {
+                    if (finalHow < 0 || (finalTag != null && EnchantmentHelper.getItemEnchantmentLevel(world.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SILK_TOUCH), tool) > 0))
+                    {
+                        Block.popResource(world, where, new ItemStack(state.getBlock()));
+                    }
+                    else
+                    {
+                        if (finalHow > 0)
+                        {
+                            tool.enchant(world.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.FORTUNE), (int) finalHow);
+                        }
+                        if (DUMMY_ENTITY == null)
+                        {
+                            DUMMY_ENTITY = new FallingBlockEntity(EntityType.FALLING_BLOCK, null);
+                        }
+                        Block.dropResources(state, world, where, be, DUMMY_ENTITY, tool);
+                    }
+                }
+                if (!finalPlayerBreak)
+                {
+                    return Value.TRUE;
+                }
+                if (toolBroke.booleanValue())
+                {
+                    return Value.NULL;
+                }
+                return new NBTSerializableValue(() -> ItemStack.CODEC.encodeStart(regs.createSerializationContext(NbtOps.INSTANCE), tool).getOrThrow(s -> new InternalExpressionException("Failed to parse item stack data: " + s)));
+            }, Value.FALSE);
 
         });
 
@@ -968,16 +1030,22 @@ public class WorldAccess
             BlockPos where = locator.block.getPos();
             BlockState state = locator.block.getBlockState();
             Block block = state.getBlock();
-            boolean success = false;
-            if (!((block == Blocks.BEDROCK || block == Blocks.BARRIER) && player.gameMode.isSurvival()))
+            final boolean[] success = {false};
+            if (FoliaRuntime.runOnPlayerAndWait(player, target ->
             {
-                success = player.gameMode.destroyBlock(where);
-            }
-            if (success)
+                if (!((block == Blocks.BEDROCK || block == Blocks.BARRIER) && target.gameMode.isSurvival()))
+                {
+                    success[0] = target.gameMode.destroyBlock(where);
+                }
+                if (success[0])
+                {
+                    world.levelEvent(null, 2001, where, Block.getId(state));
+                }
+            }))
             {
-                world.levelEvent(null, 2001, where, Block.getId(state));
+                return BooleanValue.of(success[0]);
             }
-            return BooleanValue.of(success);
+            return Value.FALSE;
         });
 
         WeightedList<ExplosionParticleInfo> DEFAULT_EXPLOSION_BLOCK_PARTICLES = WeightedList.<ExplosionParticleInfo>builder()
@@ -1064,29 +1132,38 @@ public class WorldAccess
             }
             LivingEntity theAttacker = attacker;
 
-            ServerExplosion serverExplosion = new ServerExplosion(cc.level(), source, null, null, pos, powah, createFire, mode)
-            {
-                @Override
-                @Nullable
-                public
-                LivingEntity getIndirectSourceEntity()
-                {
-                    return theAttacker;
-                }
-            };
-            int i = serverExplosion.explode();
-            ParticleOptions particleOptions3 = serverExplosion.isSmall() ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
             final float explosionPower = powah;
-
-            for (ServerPlayer serverPlayer : cc.level().players()) {
-                if (serverPlayer.distanceToSqr(pos) < 4096.0) {
-                    Optional<Vec3> optional = Optional.ofNullable((Vec3)serverExplosion.getHitPlayers().get(serverPlayer));
-                    FoliaRuntime.sendPacket(serverPlayer,
-                            new ClientboundExplodePacket(pos, explosionPower, i, optional, particleOptions3,
-                                    SoundEvents.GENERIC_EXPLODE, DEFAULT_EXPLOSION_BLOCK_PARTICLES));
+            final float finalPower = powah;
+            final boolean finalCreateFire = createFire;
+            final Explosion.BlockInteraction finalMode = mode;
+            final Entity finalSource = source;
+            ServerLevel explosionLevel = cc.level();
+            boolean exploded = FoliaRuntime.callOnRegionAndWait(explosionLevel, BlockPos.containing(pos), () ->
+            {
+                ServerExplosion serverExplosion = new ServerExplosion(explosionLevel, finalSource, null, null, pos, finalPower, finalCreateFire, finalMode)
+                {
+                    @Override
+                    @Nullable
+                    public LivingEntity getIndirectSourceEntity()
+                    {
+                        return theAttacker;
+                    }
+                };
+                int i = serverExplosion.explode();
+                ParticleOptions particleOptions3 = serverExplosion.isSmall() ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
+                for (ServerPlayer serverPlayer : explosionLevel.players())
+                {
+                    if (serverPlayer.distanceToSqr(pos) < 4096.0)
+                    {
+                        Optional<Vec3> optional = Optional.ofNullable((Vec3) serverExplosion.getHitPlayers().get(serverPlayer));
+                        FoliaRuntime.sendPacket(serverPlayer,
+                                new ClientboundExplodePacket(pos, explosionPower, i, optional, particleOptions3,
+                                        SoundEvents.GENERIC_EXPLODE, DEFAULT_EXPLOSION_BLOCK_PARTICLES));
+                    }
                 }
-            }
-            return Value.TRUE;
+                return true;
+            }, false);
+            return BooleanValue.of(exploded);
         });
 
         expression.addContextFunction("place_item", -1, (c, t, lv) ->
@@ -1110,36 +1187,32 @@ public class WorldAccess
                 sneakPlace = lv.get(locator.offset + 1).getBoolean();
             }
 
-            BlockValue.PlacementContext ctx = BlockValue.PlacementContext.from(cc.level(), where, facing, sneakPlace, stackArg);
-
-            if (!(stackArg.getItem() instanceof final BlockItem blockItem))
+            final String finalFacing = facing;
+            final boolean finalSneakPlace = sneakPlace;
+            boolean placed = FoliaRuntime.callOnRegionAndWait(cc.level(), where, () ->
             {
-                InteractionResult useResult = ctx.getItemInHand().useOn(ctx);
-                if (useResult == InteractionResult.CONSUME || useResult == InteractionResult.SUCCESS)
+                BlockValue.PlacementContext ctx = BlockValue.PlacementContext.from(cc.level(), where, finalFacing, finalSneakPlace, stackArg);
+                if (!(stackArg.getItem() instanceof final BlockItem blockItem))
                 {
-                    return Value.TRUE;
+                    InteractionResult useResult = ctx.getItemInHand().useOn(ctx);
+                    return useResult == InteractionResult.CONSUME || useResult == InteractionResult.SUCCESS;
                 }
-            }
-            else
-            {
                 if (!ctx.canPlace())
                 {
-                    return Value.FALSE;
+                    return false;
                 }
                 BlockState placementState = blockItem.getBlock().getStateForPlacement(ctx);
-                if (placementState != null)
+                if (placementState != null && placementState.canSurvive(ctx.getLevel(), where))
                 {
-                    Level level = ctx.getLevel();
-                    if (placementState.canSurvive(level, where))
-                    {
-                        level.setBlock(where, placementState, 2);
-                        SoundType blockSoundGroup = placementState.getSoundType();
-                        level.playSound(null, where, blockSoundGroup.getPlaceSound(), SoundSource.BLOCKS, (blockSoundGroup.getVolume() + 1.0F) / 2.0F, blockSoundGroup.getPitch() * 0.8F);
-                        return Value.TRUE;
-                    }
+                    ctx.getLevel().setBlock(where, placementState, 2);
+                    SoundType blockSoundGroup = placementState.getSoundType();
+                    ctx.getLevel().playSound(null, where, blockSoundGroup.getPlaceSound(), SoundSource.BLOCKS,
+                            (blockSoundGroup.getVolume() + 1.0F) / 2.0F, blockSoundGroup.getPitch() * 0.8F);
+                    return true;
                 }
-            }
-            return Value.FALSE;
+                return false;
+            }, false);
+            return BooleanValue.of(placed);
         });
 
         expression.addContextFunction("blocks_movement", -1, (c, t, lv) ->
@@ -1330,37 +1403,40 @@ public class WorldAccess
             }
             ServerLevel world = cc.level();
             BlockPos pos = locator.block.getPos();
-            ChunkAccess chunk = world.getChunk(pos);
-            int biomeX = QuartPos.fromBlock(pos.getX());
-            int biomeY = QuartPos.fromBlock(pos.getY());
-            int biomeZ = QuartPos.fromBlock(pos.getZ());
-            try
+            final boolean immediateUpdate = doImmediateUpdate;
+            return FoliaRuntime.callOnRegionAndWait(world, pos, () ->
             {
-                int i = QuartPos.fromBlock(chunk.getMinY());
-                int j = i + QuartPos.fromBlock(chunk.getHeight()) - 1;
-                int k = Mth.clamp(biomeY, i, j);
-                int l = chunk.getSectionIndex(QuartPos.toBlock(k));
+                ChunkAccess chunk = world.getChunk(pos);
+                int biomeX = QuartPos.fromBlock(pos.getX());
+                int biomeY = QuartPos.fromBlock(pos.getY());
+                int biomeZ = QuartPos.fromBlock(pos.getZ());
+                try
+                {
+                    int i = QuartPos.fromBlock(chunk.getMinY());
+                    int j = i + QuartPos.fromBlock(chunk.getHeight()) - 1;
+                    int k = Mth.clamp(biomeY, i, j);
+                    int l = chunk.getSectionIndex(QuartPos.toBlock(k));
 
-                ((PalettedContainer<Holder<Biome>>) chunk.getSection(l).getBiomes()).set(biomeX & 3, k & 3, biomeZ & 3, biome);
-            }
-            catch (Throwable var8)
-            {
-                return Value.FALSE;
-            }
-            if (doImmediateUpdate)
-            {
-                WorldTools.forceChunkUpdate(pos, world);
-            }
-            chunk.markUnsaved();
-            return Value.TRUE;
+                    ((PalettedContainer<Holder<Biome>>) chunk.getSection(l).getBiomes()).set(biomeX & 3, k & 3, biomeZ & 3, biome);
+                }
+                catch (Throwable var8)
+                {
+                    return Value.FALSE;
+                }
+                if (immediateUpdate)
+                {
+                    WorldTools.forceChunkUpdate(pos, world);
+                }
+                chunk.markUnsaved();
+                return Value.TRUE;
+            }, Value.FALSE);
         });
 
         expression.addContextFunction("reload_chunk", -1, (c, t, lv) -> {
             CarpetContext cc = (CarpetContext) c;
             BlockPos pos = BlockArgument.findIn(cc, lv, 0).block.getPos();
             ServerLevel world = cc.level();
-            cc.server().executeBlocking(() -> WorldTools.forceChunkUpdate(pos, world));
-            return Value.TRUE;
+            return BooleanValue.of(FoliaRuntime.runOnRegionAndWait(world, pos, () -> WorldTools.forceChunkUpdate(pos, world)));
         });
 
         expression.addContextFunction("structure_references", -1, (c, t, lv) -> {
@@ -1368,7 +1444,9 @@ public class WorldAccess
             BlockArgument locator = BlockArgument.findIn(cc, lv, 0);
             ServerLevel world = cc.level();
             BlockPos pos = locator.block.getPos();
-            Map<Structure, LongSet> references = world.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.STRUCTURE_REFERENCES).getAllReferences();
+            Map<Structure, LongSet> references = FoliaRuntime.callOnRegionAndWait(world, pos,
+                    () -> world.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.STRUCTURE_REFERENCES).getAllReferences(),
+                    Map.of());
             Registry<Structure> reg = cc.registry(Registries.STRUCTURE);
             if (lv.size() == locator.offset)
             {
@@ -1445,10 +1523,12 @@ public class WorldAccess
             {
                 structure.addAll(reg.entrySet().stream().map(Map.Entry::getValue).toList());
             }
+            final boolean requestedSize = needSize;
             if (singleOutput)
             {
-                StructureStart start = FeatureGenerator.shouldStructureStartAt(world, pos, structure.get(0), needSize);
-                return start == null ? Value.NULL : !needSize ? Value.TRUE : ValueConversions.of(start, cc.registryAccess());
+                StructureStart start = FoliaRuntime.callOnRegionAndWait(world, pos,
+                        () -> FeatureGenerator.shouldStructureStartAt(world, pos, structure.get(0), requestedSize), null);
+                return start == null ? Value.NULL : !requestedSize ? Value.TRUE : ValueConversions.of(start, cc.registryAccess());
             }
             Map<Value, Value> ret = new HashMap<>();
             for (Structure str : structure)
@@ -1456,7 +1536,8 @@ public class WorldAccess
                 StructureStart start;
                 try
                 {
-                    start = FeatureGenerator.shouldStructureStartAt(world, pos, str, needSize);
+                    start = FoliaRuntime.callOnRegionAndWait(world, pos,
+                            () -> FeatureGenerator.shouldStructureStartAt(world, pos, str, requestedSize), null);
                 }
                 catch (NullPointerException npe)
                 {
@@ -1470,7 +1551,7 @@ public class WorldAccess
                 }
 
                 Value key = NBTSerializableValue.nameFromRegistryId(reg.getKey(str));
-                ret.put(key, (!needSize) ? Value.NULL : ValueConversions.of(start, cc.registryAccess()));
+                ret.put(key, (!requestedSize) ? Value.NULL : ValueConversions.of(start, cc.registryAccess()));
             }
             return MapValue.wrap(ret);
         });
@@ -1481,7 +1562,9 @@ public class WorldAccess
 
             ServerLevel world = cc.level();
             BlockPos pos = locator.block.getPos();
-            Map<Structure, StructureStart> structures = world.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.STRUCTURE_STARTS).getAllStarts();
+            Map<Structure, StructureStart> structures = FoliaRuntime.callOnRegionAndWait(world, pos,
+                    () -> world.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.STRUCTURE_STARTS).getAllStarts(),
+                    Map.of());
             Registry<Structure> reg = cc.registry(Registries.STRUCTURE);
             if (lv.size() == locator.offset)
             {
@@ -1524,23 +1607,20 @@ public class WorldAccess
                 throw new ThrowStatement(structureName, Throwables.UNKNOWN_STRUCTURE);
             }
 
-            Value[] result = new Value[]{Value.NULL};
-
-            ((CarpetContext) c).server().executeBlocking(() ->
+            return FoliaRuntime.callOnRegionAndWait(world, pos, () ->
             {
                 Map<Structure, StructureStart> structures = world.getChunk(pos).getAllStarts();
                 if (lv.size() == locator.offset + 1)
                 {
                     boolean res = FeatureGenerator.plopGrid(configuredStructure, ((CarpetContext) c).level(), locator.block.getPos());
-                    result[0] = res ? Value.TRUE : Value.FALSE;
-                    return;
+                    return res ? Value.TRUE : Value.FALSE;
                 }
                 Value newValue = lv.get(locator.offset + 1);
                 if (newValue.isNull())
                 {
                     if (!structures.containsKey(configuredStructure))
                     {
-                        return;
+                        return Value.TRUE;
                     }
                     StructureStart start = structures.get(configuredStructure);
                     ChunkPos structureChunkPos = start.getChunkPos();
@@ -1551,19 +1631,21 @@ public class WorldAccess
                         {
                             ChunkPos chpos = new ChunkPos(chx, chz);
 
-                            Map<Structure, LongSet> references =
-                                    world.getChunk(chpos.getWorldPosition()).getAllReferences();
-                            if (references.containsKey(configuredStructure) && references.get(configuredStructure) != null)
+                            FoliaRuntime.runOnRegionAndWait(world, chpos.getWorldPosition(), () ->
                             {
-                                references.get(configuredStructure).remove(structureChunkPos.toLong());
-                            }
+                                Map<Structure, LongSet> references = world.getChunk(chpos.getWorldPosition()).getAllReferences();
+                                if (references.containsKey(configuredStructure) && references.get(configuredStructure) != null)
+                                {
+                                    references.get(configuredStructure).remove(structureChunkPos.toLong());
+                                }
+                            });
                         }
                     }
                     structures.remove(configuredStructure);
-                    result[0] = Value.TRUE;
+                    return Value.TRUE;
                 }
-            });
-            return result[0];
+                return Value.TRUE;
+            }, Value.FALSE);
         });
 
         expression.addContextFunction("reset_chunk", -1, (c, t, lv) ->
@@ -1577,7 +1659,9 @@ public class WorldAccess
             CarpetContext cc = (CarpetContext) c;
             BlockArgument locator = BlockArgument.findIn(cc, lv, 0);
             BlockPos pos = locator.block.getPos();
-            return new NumericValue(cc.level().getChunk(pos).getInhabitedTime());
+            ServerLevel world = cc.level();
+            return FoliaRuntime.callOnRegionAndWait(world, pos,
+                    () -> new NumericValue(world.getChunk(pos).getInhabitedTime()), Value.ZERO);
         });
 
         expression.addContextFunction("spawn_potential", -1, (c, t, lv) ->

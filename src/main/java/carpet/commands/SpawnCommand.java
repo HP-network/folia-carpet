@@ -1,6 +1,7 @@
 package carpet.commands;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.fakes.SpawnGroupInterface;
 import carpet.helpers.HopperCounter;
 import carpet.utils.CommandHelper;
@@ -39,6 +40,16 @@ import static net.minecraft.commands.SharedSuggestionProvider.suggest;
 
 public class SpawnCommand
 {
+    private static boolean dispatchAtSource(CommandSourceStack source, Runnable task)
+    {
+        if (!FoliaRuntime.isGlobalThread())
+        {
+            return false;
+        }
+        FoliaRuntime.runOnRegion(source.getLevel(), BlockPos.containing(source.getPosition()), task);
+        return true;
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext commandBuildContext)
     {
         LiteralArgumentBuilder<CommandSourceStack> literalargumentbuilder = literal("spawn").
@@ -122,6 +133,11 @@ public class SpawnCommand
 
     private static int listSpawns(CommandSourceStack source, BlockPos pos)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            FoliaRuntime.runOnRegion(source.getLevel(), pos, () -> listSpawns(source, pos));
+            return 1;
+        }
         Messenger.send(source, SpawnReporter.report(pos, source.getLevel()));
         return 1;
     }
@@ -199,6 +215,7 @@ public class SpawnCommand
 
     private static int generalMobcaps(CommandSourceStack source)
     {
+        if (dispatchAtSource(source, () -> generalMobcaps(source))) return 1;
         Messenger.send(source, SpawnReporter.printMobcapsForDimension(source.getLevel(), true));
         return 1;
     }
@@ -232,6 +249,11 @@ public class SpawnCommand
 
     private static int mobcapsForDimension(CommandSourceStack source, ServerLevel world)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            FoliaRuntime.runOnRegion(world, BlockPos.ZERO, () -> mobcapsForDimension(source, world));
+            return 1;
+        }
         Messenger.send(source, SpawnReporter.printMobcapsForDimension(world, true));
         return 1;
     }
@@ -239,6 +261,9 @@ public class SpawnCommand
     private static int listEntitiesOfType(CommandSourceStack source, String mobtype, boolean all) throws CommandSyntaxException
     {
         MobCategory cat = getCategory(mobtype);
+        if (dispatchAtSource(source, () -> {
+            try { listEntitiesOfType(source, mobtype, all); } catch (CommandSyntaxException ignored) { }
+        })) return 1;
         Messenger.send(source, SpawnReporter.printEntitiesByType(cat, source.getLevel(), all));
         return 1;
     }

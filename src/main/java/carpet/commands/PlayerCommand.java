@@ -5,6 +5,7 @@ import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
 import carpet.CarpetSettings;
 import carpet.folia.MixinCompat;
+import carpet.folia.FoliaRuntime;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
@@ -201,6 +202,12 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is already logged on");
             return true;
         }
+        // OldUsersConverter may perform a synchronous session-server lookup.
+        // Fake-player creation performs that lookup off-thread on Folia.
+        if (FoliaRuntime.plugin() != null)
+        {
+            return false;
+        }
         UUID uuid = OldUsersConverter.convertMobOwnerIfNecessary(server, playerName);
         if (uuid == null)
         {
@@ -243,7 +250,7 @@ public class PlayerCommand
     {
         if (cantReMove(context)) return 0;
         ServerPlayer player = getPlayer(context);
-        player.kill(player.level());
+        FoliaRuntime.runOnPlayer(player, target -> target.kill(target.level()));
         return 1;
     }
 
@@ -332,7 +339,7 @@ public class PlayerCommand
     {
         if (cantManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
-        action.accept(MixinCompat.player_getActionPack(player));
+        FoliaRuntime.runOnPlayer(player, target -> action.accept(MixinCompat.player_getActionPack(target)));
         return 1;
     }
 
@@ -356,7 +363,7 @@ public class PlayerCommand
             return 0;
         }
 
-        EntityPlayerMPFake.createShadow(player.level().getServer(), player);
+        FoliaRuntime.runOnPlayer(player, target -> EntityPlayerMPFake.createShadow(target.level().getServer(), target));
         return 1;
     }
 }

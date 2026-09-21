@@ -384,64 +384,62 @@ public class Auxiliary
             {
                 throw new InternalExpressionException("'create_marker' requires a name and three coordinates, with optional direction, and optional block on its head");
             }
-            Level level = cc.level();
-            ArmorStand armorstand = new ArmorStand(EntityType.ARMOR_STAND, level);
-            double yoffset;
-            if (targetBlock == null && name == null)
+            ServerLevel level = cc.level();
+            final BlockState markerBlock = targetBlock;
+            final Component markerName = name;
+            final boolean markerInteractable = interactable;
+            final Vector3Argument markerPoint = pointLocator;
+            final String markerTag = MARKER_STRING + "_" + ((cc.host.getName() == null) ? "" : cc.host.getName());
+            BlockPos markerPos = BlockPos.containing(markerPoint.vec);
+            return FoliaRuntime.callOnRegionAndWait(level, markerPos, () ->
             {
-                yoffset = 0.0;
-            }
-            else if (!interactable && targetBlock == null)
-            {
-                yoffset = -0.41;
-            }
-            else
-            {
-                if (targetBlock == null)
+                ArmorStand armorstand = new ArmorStand(EntityType.ARMOR_STAND, level);
+                double yoffset;
+                if (markerBlock == null && markerName == null)
                 {
-                    yoffset = -armorstand.getBbHeight() - 0.41;
+                    yoffset = 0.0;
+                }
+                else if (!markerInteractable && markerBlock == null)
+                {
+                    yoffset = -0.41;
                 }
                 else
                 {
-                    yoffset = -armorstand.getBbHeight() + 0.3;
+                    yoffset = markerBlock == null ? -armorstand.getBbHeight() - 0.41 : -armorstand.getBbHeight() + 0.3;
                 }
-            }
-            armorstand.snapTo(
-                    pointLocator.vec.x,
-
-                    pointLocator.vec.y + yoffset,
-                    pointLocator.vec.z,
-                    (float) pointLocator.yaw,
-                    (float) pointLocator.pitch
-            );
-            armorstand.addTag(MARKER_STRING + "_" + ((cc.host.getName() == null) ? "" : cc.host.getName()));
-            armorstand.addTag(MARKER_STRING);
-            if (targetBlock != null)
-            {
-                armorstand.setItemSlot(EquipmentSlot.HEAD, new ItemStack(targetBlock.getBlock().asItem()));
-            }
-            if (name != null)
-            {
-                armorstand.setCustomName(name);
-                armorstand.setCustomNameVisible(true);
-            }
-            armorstand.setHeadPose(new Rotations((int) pointLocator.pitch, 0, 0));
-            armorstand.setNoGravity(true);
-            armorstand.setInvisible(true);
-            armorstand.setInvulnerable(true);
-            armorstand.getEntityData().set(ArmorStand.DATA_CLIENT_FLAGS, (byte) (interactable ? 8 : 16 | 8));
-            level.addFreshEntity(armorstand);
-            return new EntityValue(armorstand);
+                armorstand.snapTo(markerPoint.vec.x, markerPoint.vec.y + yoffset, markerPoint.vec.z,
+                        (float) markerPoint.yaw, (float) markerPoint.pitch);
+                armorstand.addTag(markerTag);
+                armorstand.addTag(MARKER_STRING);
+                if (markerBlock != null)
+                {
+                    armorstand.setItemSlot(EquipmentSlot.HEAD, new ItemStack(markerBlock.getBlock().asItem()));
+                }
+                if (markerName != null)
+                {
+                    armorstand.setCustomName(markerName);
+                    armorstand.setCustomNameVisible(true);
+                }
+                armorstand.setHeadPose(new Rotations((int) markerPoint.pitch, 0, 0));
+                armorstand.setNoGravity(true);
+                armorstand.setInvisible(true);
+                armorstand.setInvulnerable(true);
+                armorstand.getEntityData().set(ArmorStand.DATA_CLIENT_FLAGS, (byte) (markerInteractable ? 8 : 16 | 8));
+                return level.addFreshEntity(armorstand) ? new EntityValue(armorstand) : Value.NULL;
+            }, Value.NULL);
         });
 
         expression.addContextFunction("remove_all_markers", 0, (c, t, lv) -> {
             CarpetContext cc = (CarpetContext) c;
             int total = 0;
             String markerName = MARKER_STRING + "_" + ((cc.host.getName() == null) ? "" : cc.host.getName());
-            for (Entity e : cc.level().getEntities(EntityType.ARMOR_STAND, as -> as.getTags().contains(markerName)))
+            for (Entity e : FoliaRuntime.allEntities(cc.level()))
             {
-                total++;
-                e.discard();
+                if (e instanceof ArmorStand armorStand && armorStand.getTags().contains(markerName)
+                        && FoliaRuntime.runOnEntityAndWait(armorStand, Entity::discard))
+                {
+                    total++;
+                }
             }
             return new NumericValue(total);
         });
@@ -711,12 +709,15 @@ public class Auxiliary
         expression.addContextFunction("save", 0, (c, t, lv) ->
         {
             CommandSourceStack s = ((CarpetContext) c).source();
-            s.getServer().getPlayerList().saveAll();
-            s.getServer().saveAllChunks(true, true, true);
-            for (ServerLevel world : s.getServer().getAllLevels())
+            FoliaRuntime.runOnGlobal(() ->
             {
-                world.getChunkSource().tick(() -> true, false);
-            }
+                s.getServer().getPlayerList().saveAll();
+                s.getServer().saveAllChunks(true, true, true);
+                for (ServerLevel world : s.getServer().getAllLevels())
+                {
+                    world.getChunkSource().tick(() -> true, false);
+                }
+            });
             CarpetScriptServer.LOG.warn("Saved chunks");
             return Value.TRUE;
         });
@@ -731,7 +732,8 @@ public class Auxiliary
 
         expression.addContextFunction("day_time", -1, (c, t, lv) ->
         {
-            Value time = new NumericValue(((CarpetContext) c).level().getDayTime());
+            ServerLevel level = ((CarpetContext) c).level();
+            Value time = new NumericValue(level.getDayTime());
             if (!lv.isEmpty())
             {
                 long newTime = NumericValue.asNumber(lv.get(0)).getLong();
@@ -739,7 +741,8 @@ public class Auxiliary
                 {
                     newTime = 0;
                 }
-                ((CarpetContext) c).level().setDayTime(newTime);
+                final long targetTime = newTime;
+                FoliaRuntime.runOnGlobal(() -> level.setDayTime(targetTime));
             }
             return time;
         });
@@ -867,18 +870,13 @@ public class Auxiliary
                 throw new InternalExpressionException("'plop' needs extra argument indicating what to plop");
             }
             String what = lv.get(locator.offset).getString();
-            Value[] result = new Value[]{Value.NULL};
-            ((CarpetContext) c).server().executeBlocking(() ->
+            ServerLevel level = ((CarpetContext) c).level();
+            BlockPos plopPos = locator.block.getPos();
+            return FoliaRuntime.callOnRegionAndWait(level, plopPos, () ->
             {
-                Boolean res = FeatureGenerator.plop(what, ((CarpetContext) c).level(), locator.block.getPos());
-
-                if (res == null)
-                {
-                    return;
-                }
-                result[0] = BooleanValue.of(res);
-            });
-            return result[0];
+                Boolean res = FeatureGenerator.plop(what, level, plopPos);
+                return res == null ? Value.FALSE : BooleanValue.of(res);
+            }, Value.FALSE);
         });
 
         expression.addContextFunction("schedule", -1, (c, t, lv) -> {
@@ -1171,7 +1169,7 @@ public class Auxiliary
                 return Value.NULL;
             }
             Boolean[] successful = new Boolean[]{true};
-            server.executeBlocking(() ->
+            Runnable install = () ->
             {
                 try
                 {
@@ -1220,7 +1218,15 @@ public class Auxiliary
                     }
 
                 }
-            });
+            };
+            if (FoliaRuntime.isGlobalThread())
+            {
+                install.run();
+            }
+            else
+            {
+                FoliaRuntime.runOnGlobal(install);
+            }
             return BooleanValue.of(successful[0]);
         });
 

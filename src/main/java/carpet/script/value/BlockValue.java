@@ -4,6 +4,7 @@ import carpet.script.CarpetContext;
 import carpet.script.exception.InternalExpressionException;
 import carpet.script.exception.ThrowStatement;
 import carpet.script.exception.Throwables;
+import carpet.folia.FoliaRuntime;
 
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -107,6 +108,10 @@ public class BlockValue extends Value
         }
         if (pos != null)
         {
+            if (FoliaRuntime.plugin() != null)
+            {
+                return FoliaRuntime.callOnRegionAndWait(world, pos, () -> world.getBlockState(pos), Blocks.AIR.defaultBlockState());
+            }
             blockState = world.getBlockState(pos);
             return blockState;
         }
@@ -117,6 +122,11 @@ public class BlockValue extends Value
     {
         if (level instanceof final ServerLevel serverLevel)
         {
+            if (FoliaRuntime.plugin() != null)
+            {
+                return FoliaRuntime.callOnRegionAndWait(serverLevel, pos,
+                        () -> serverLevel.getBlockEntity(pos), null);
+            }
             return serverLevel.getServer().isSameThread()
                     ? serverLevel.getBlockEntity(pos)
                     : serverLevel.getChunkAt(pos).getBlockEntity(pos, LevelChunk.EntityCreationType.IMMEDIATE);

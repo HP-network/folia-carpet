@@ -5,6 +5,7 @@ import carpet.script.CarpetEventServer;
 import carpet.script.CarpetScriptHost;
 import carpet.script.Context;
 import carpet.script.Expression;
+import carpet.folia.FoliaRuntime;
 import carpet.script.argument.FunctionArgument;
 import carpet.script.argument.Vector3Argument;
 import carpet.script.exception.InternalExpressionException;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
@@ -140,26 +142,34 @@ public class Entities
             }
             tag.putString("id", entityId.toString());
             Vec3 vec3d = position.vec;
+            final boolean hasCustomTag = hasTag;
+            final CompoundTag spawnTag = tag.copy();
+            final BlockPos spawnPos = BlockPos.containing(vec3d);
 
             ServerLevel serverWorld = cc.level();
-            Entity entity = EntityType.loadEntityRecursive(tag, serverWorld, EntitySpawnReason.COMMAND, e -> {
-                e.snapTo(vec3d.x, vec3d.y, vec3d.z, e.getYRot(), e.getXRot());
-                return e;
-            });
-            if (entity == null)
+            Entity entity = FoliaRuntime.callOnRegionAndWait(serverWorld, spawnPos, () ->
             {
-                return Value.NULL;
-            }
-            if (!hasTag && entity instanceof Mob mob)
-            {
-                mob.finalizeSpawn(serverWorld, serverWorld.getCurrentDifficultyAt(entity.blockPosition()), EntitySpawnReason.COMMAND, null);
-            }
-            if (!serverWorld.tryAddFreshEntityWithPassengers(entity))
-            {
-                entity.discard();
-                return Value.NULL;
-            }
-            return new EntityValue(entity);
+                Entity created = EntityType.loadEntityRecursive(spawnTag, serverWorld, EntitySpawnReason.COMMAND, e ->
+                {
+                    e.snapTo(vec3d.x, vec3d.y, vec3d.z, e.getYRot(), e.getXRot());
+                    return e;
+                });
+                if (created == null)
+                {
+                    return null;
+                }
+                if (!hasCustomTag && created instanceof Mob mob)
+                {
+                    mob.finalizeSpawn(serverWorld, serverWorld.getCurrentDifficultyAt(created.blockPosition()), EntitySpawnReason.COMMAND, null);
+                }
+                if (!serverWorld.tryAddFreshEntityWithPassengers(created))
+                {
+                    created.discard();
+                    return null;
+                }
+                return created;
+            }, null);
+            return entity == null ? Value.NULL : new EntityValue(entity);
         });
 
         expression.addContextFunction("entity_id", 1, (c, t, lv) ->
@@ -177,8 +187,16 @@ public class Entities
             String who = lv.get(0).getString();
             CommandSourceStack source = ((CarpetContext) c).source();
             EntityValue.EntityClassDescriptor eDesc = EntityValue.getEntityDescriptor(who, source.getServer());
-            List<? extends Entity> entityList = source.getLevel().getEntities(eDesc.directType, eDesc.filteringPredicate);
-            return ListValue.wrap(entityList.stream().map(EntityValue::new));
+            List<Value> result = new ArrayList<>();
+            for (Entity entity : FoliaRuntime.allEntities(source.getLevel()))
+            {
+                Entity matching = eDesc.directType.tryCast(entity);
+                if (matching != null && eDesc.filteringPredicate.test(matching))
+                {
+                    result.add(new EntityValue(matching));
+                }
+            }
+            return ListValue.wrap(result);
         });
 
         expression.addContextFunction("entity_area", -1, (c, t, lv) ->
@@ -213,15 +231,38 @@ public class Entities
             Vec3 range = rangeLocator.vec;
             AABB area = centerBox.inflate(range.x, range.y, range.z);
             EntityValue.EntityClassDescriptor eDesc = EntityValue.getEntityDescriptor(who, cc.server());
-            List<? extends Entity> entityList = cc.level().getEntities(eDesc.directType, area, eDesc.filteringPredicate);
-            return ListValue.wrap(entityList.stream().map(EntityValue::new));
+            ServerLevel queryWorld = centerLocator.entity != null && centerLocator.entity.level() instanceof ServerLevel entityWorld
+                    ? entityWorld : cc.level();
+            List<Value> result = new ArrayList<>();
+            for (Entity entity : FoliaRuntime.allEntities(queryWorld))
+            {
+                Entity matching = eDesc.directType.tryCast(entity);
+                if (matching != null && eDesc.filteringPredicate.test(matching)
+                        && matching.getBoundingBox().intersects(area))
+                {
+                    result.add(new EntityValue(matching));
+                }
+            }
+            return ListValue.wrap(result);
         });
 
         expression.addContextFunction("entity_selector", -1, (c, t, lv) ->
         {
             String selector = lv.get(0).getString();
             List<Value> retlist = new ArrayList<>();
-            for (Entity e : EntityValue.getEntitiesFromSelector(((CarpetContext) c).source(), selector))
+            CarpetContext cc = (CarpetContext) c;
+            List<? extends Entity> selected;
+            if (FoliaRuntime.plugin() != null && cc.level() instanceof ServerLevel)
+            {
+                selected = new ArrayList<>(EntityValue.getEntitiesFromSelector(cc.source(), selector));
+            }
+            else
+            {
+                selected = FoliaRuntime.callOnRegionAndWait(cc.level(),
+                        BlockPos.containing(cc.source().getPosition()),
+                        () -> new ArrayList<>(EntityValue.getEntitiesFromSelector(cc.source(), selector)), List.of());
+            }
+            for (Entity e : selected)
             {
                 retlist.add(new EntityValue(e));
             }

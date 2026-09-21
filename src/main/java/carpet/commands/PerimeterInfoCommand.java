@@ -1,6 +1,7 @@
 package carpet.commands;
 
 import carpet.CarpetSettings;
+import carpet.folia.FoliaRuntime;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
 import carpet.utils.PerimeterDiagnostics;
@@ -50,6 +51,11 @@ public class PerimeterInfoCommand
 
     private static int perimeterDiagnose(CommandSourceStack source, BlockPos pos, String mobId)
     {
+        if (FoliaRuntime.isGlobalThread())
+        {
+            FoliaRuntime.runOnRegion(source.getLevel(), pos, () -> perimeterDiagnose(source, pos, mobId));
+            return 1;
+        }
         try
         {
             CompoundTag nbttagcompound = new CompoundTag();

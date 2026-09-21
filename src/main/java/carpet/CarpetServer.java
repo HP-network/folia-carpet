@@ -25,6 +25,7 @@ import carpet.script.CarpetScriptServer;
 import carpet.script.CarpetEventServer;
 import carpet.api.settings.SettingsManager;
 import carpet.logging.HUDController;
+import carpet.folia.FoliaRuntime;
 import carpet.script.external.Carpet;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.ParticleParser;
@@ -137,20 +138,26 @@ public class CarpetServer
         {
             return;
         }
+        if (FoliaRuntime.plugin() != null && FoliaRuntime.isGlobalThread() && server.overworld() != null)
+        {
+            FoliaRuntime.runOnRegion(server.overworld(), net.minecraft.core.BlockPos.ZERO,
+                    () -> tickOnRegion(server));
+            return;
+        }
+        tickOnRegion(server);
+    }
+
+    private static void tickOnRegion(MinecraftServer server)
+    {
         HUDController.update_hud(server, null);
         if (scriptServer != null) scriptServer.tick();
 
-        // The global event is safe to dispatch from Folia's global scheduler.
-        // Dimension-specific events are scheduled on their own region by the
-        // Folia plugin so Scarpet callbacks can touch that world safely.
         if (server.tickRateManager().runsNormally())
         {
             CarpetEventServer.Event.TICK.onTick(server);
+            CarpetSettings.impendingFillSkipUpdates.set(false);
+            extensions.forEach(e -> e.onTick(server));
         }
-
-        CarpetSettings.impendingFillSkipUpdates.set(false);
-        extensions.forEach(e -> e.onTick(server));
-
     }
 
     public static void tickDimensionEvent(MinecraftServer server, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension)
