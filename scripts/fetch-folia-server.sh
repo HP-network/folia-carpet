@@ -19,6 +19,8 @@ if [[ ! -d "$source_dir/.git" ]]; then
 fi
 git -C "$source_dir" fetch --depth 1 origin "$folia_commit"
 git -C "$source_dir" checkout --detach "$folia_commit"
+git -C "$source_dir" config user.name "FoliaCarpet Builder"
+git -C "$source_dir" config user.email "build@localhost"
 
 if [[ ! -f "$source_dir/folia-server/build/libs/folia-server-${version}-R0.1-SNAPSHOT.jar" ]]; then
     (cd "$source_dir" && ./gradlew applyAllPatches && ./gradlew :folia-server:build --no-daemon)
