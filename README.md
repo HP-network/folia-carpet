@@ -1,71 +1,83 @@
 # FoliaCarpet
 
-Carpet utilities and Scarpet scripting for Folia 1.21.11. FoliaCarpet brings Carpet rules, technical-server commands, fake players, logging, profiling and the Scarpet runtime to a Folia server.
+FoliaCarpet is the Carpet 1.4.194 runtime adapted for Folia 1.21.11. It adds Carpet rules, Scarpet scripting, fake players, loggers, profiling, spawn tools and technical-server utilities without requiring a client-side mod.
+
+The plugin keeps Carpet's command and rule model while routing world, entity and tick work through Folia's region schedulers where required.
+
+## Features
+
+- Carpet rule system with command, survival, creative, feature, optimization, bugfix, TNT, dispenser, Scarpet, client and experimental categories
+- Scarpet expressions, app loading, events, custom commands and bundled scripts
+- Fake players and action packs: movement, looking, mining, attacking, item use, inventory actions and more
+- Hopper counters, block information, shape drawing, spawn inspection and mob-cap tools
+- Server health and entity profiling
+- Logger subscriptions and in-game overlays
+- Mob AI tracking with `/track`
+- Folia region-aware scheduling for supported operations
+
+## Compatibility
+
+- Folia 1.21.11
+- Java 21
+- Server plugin only; clients do not need Fabric, Quilt or a separate mod
+- Not compatible with ordinary Paper, Spigot, Fabric or Quilt servers
+
+Use one copy of FoliaCarpet per server. Back up the world before enabling rules that change redstone, TNT, block movement or other game mechanics.
 
 ## Installation
 
-1. Download the latest `folia-carpet` jar from [Releases](https://github.com/HP-network/folia-carpet/releases).
-2. Put the jar in the server's `plugins` directory.
-3. Start or restart the server.
-4. Run `/carpet list` in the console or as an operator to check the available rules.
+1. Stop the Folia server.
+2. Download `folia-carpet-1.4.194-folia.2.jar` from [Releases](https://github.com/HP-network/folia-carpet/releases).
+3. Copy the jar into the server's `plugins` directory.
+4. Start the server and check the startup log for `Carpet Folia initialized` and `Carpet Folia enabled`.
+5. Run `/carpet list` as an operator or from the console.
 
-FoliaCarpet is a Folia plugin. It is not intended for a regular Paper or Spigot server.
-
-## Usage
-
-Carpet rules are changed with `/carpet`:
-
-```text
-/carpet list
-/carpet <rule>
-/carpet <rule> <value>
-```
-
-Examples:
-
-```text
-/carpet commandPlayer true
-/carpet hopperCounters true
-/carpet language zh_cn
-```
-
-Rule values are saved in the world's `carpet.conf` file. A rule can be reset with its default value shown by `/carpet <rule>`.
+The first rule change creates or updates `carpet.conf` in the world directory. Do not edit that file while the server is running.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `/carpet` | List and change Carpet rules. |
+| `/carpet` | List, inspect and change Carpet rules. |
 | `/counter` | View and reset hopper counters. |
 | `/distance` | Measure the distance between positions. |
 | `/draw` | Draw spheres, balls, diamonds, pyramids, cones, cylinders and cuboids. |
 | `/info` | Inspect block information. |
-| `/log` | Enable, configure and stop Carpet loggers. |
-| `/mobai` | Inspect and track mob AI goals. |
+| `/log` | List, enable, configure and stop Carpet loggers. |
 | `/perimeterinfo` | Inspect spawnable spaces around a position. |
 | `/player` | Spawn and control fake players and action packs. |
-| `/profile` | Profile server health and entities. |
-| `/script` | Run and manage Scarpet scripts. |
-| `/spawn` | Inspect spawn attempts, mob caps and spawn rates. |
-| `/track` | Track mob AI goals. |
+| `/profile` | Profile server health or entities. |
+| `/script` | Run, load, unload and manage Scarpet scripts. |
+| `/spawn` | Inspect spawn attempts, mob caps, rates and entities. |
+| `/track` | Track mob AI goals for an entity type. |
 
-Some commands are enabled or restricted by their corresponding Carpet rule. Use `/carpet list command` to see the command rules on the server.
+Use Minecraft's tab completion for the complete subcommand tree. Useful examples:
 
-## Rules
+```text
+/carpet list
+/carpet commandPlayer ops
+/carpet hopperCounters true
+/carpet language zh_cn
+/profile health 200
+/profile entities 200
+/spawn mobcaps
+/spawn tracking start
+/player Steve spawn
+/player Steve move forward
+/log
+/script run 1 + 1
+```
 
-Rules are grouped into `COMMAND`, `CREATIVE`, `FEATURE`, `SURVIVAL`, `TNT`, `SCARPET`, `OPTIMIZATION`, `BUGFIX` and `EXPERIMENTAL`. Common examples include:
+## Rules and permissions
 
-- `commandPlayer`, `commandScript`, `commandLog` and `commandDraw`
-- `hopperCounters`, `persistentParrots` and `renewableCoral`
-- `mergeTNT`, `optimizedTNT` and `tntDoNotUpdate`
-- `movableBlockEntities`, `shulkerBoxStackSize` and `railPowerLimit`
-- `creativeNoClip`, `antiCheatDisabled` and `lagFreeSpawning`
+Rules are grouped into the categories shown by `/carpet list`. Use the following forms to inspect the exact description, current value, default and allowed options:
 
-Run `/carpet list <category>` or `/carpet <rule>` for the exact value, description and allowed options for a rule.
+```text
+/carpet <rule>
+/carpet list <category>
+```
 
-## Permissions
-
-FoliaCarpet follows Minecraft operator permission levels. The default command rule is `ops`. Administrators can change command access with the relevant `command...` rule, for example:
+Command access follows Minecraft permission levels. The relevant `command...` rules control individual Carpet commands. For example:
 
 ```text
 /carpet commandLog true
@@ -73,23 +85,35 @@ FoliaCarpet follows Minecraft operator permission levels. The default command ru
 /carpet commandScriptACE 4
 ```
 
-Only an operator with the required level can raise or lower a command's permission level. Fake-player commands also require `allowSpawningOfflinePlayers` when an offline profile is used.
+Scarpet code that can execute commands or modify the world is controlled separately by `commandScriptACE`. Fake players using offline profiles also require `allowSpawningOfflinePlayers`.
 
 ## Language
 
-The default language is English. Switch the server language with:
+The default language is English. Change it with:
 
 ```text
 /carpet language zh_cn
 ```
 
-Available language packs include English, Simplified Chinese, Traditional Chinese, French, Spanish (Argentina) and Portuguese (Brazil).
+Bundled language packs: English, Simplified Chinese, Traditional Chinese, French, Spanish (Argentina) and Portuguese (Brazil).
 
-## Requirements
+## Build from source
 
-- Folia 1.21.11
-- Java 21
+The build needs Java 21 and a Folia 1.21.11 server jar. If the server jar is not already present, fetch and build it first:
+
+```bash
+./scripts/fetch-folia-server.sh
+./gradlew clean build --no-daemon
+```
+
+The plugin is written to:
+
+```text
+build/libs/folia-carpet-1.4.194-folia.2.jar
+```
+
+To use a different local server jar, set `FOLIA_SERVER_JAR` before running Gradle.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+MIT. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md) for the project and upstream attribution.
