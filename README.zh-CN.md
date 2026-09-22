@@ -36,6 +36,8 @@ java -javaagent:plugins/folia-carpet-1.4.194-folia.3.jar -jar folia-server.jar -
 
 服务器允许动态 Attach 时，插件仍会自动使用动态方式。
 
+升级时先停止服务器，`plugins` 目录中只保留一个 FoliaCarpet jar。删除旧的 `folia-carpet-1.4.194-folia.2.jar` 和重复的 `folia-carpet.jar`，否则 Folia 会报告插件名冲突并可能加载旧类。如果服务器为旧 jar 创建了 `plugins/.paper-remapped` 缓存，在第一次启动 `.3` 前一并删除该缓存。
+
 每个服务端只放一份 FoliaCarpet。启用会改变红石、TNT、方块移动或其他游戏机制的规则前，请先备份世界。
 
 ## 安装

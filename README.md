@@ -36,6 +36,8 @@ java -javaagent:plugins/folia-carpet-1.4.194-folia.3.jar -jar folia-server.jar -
 
 The dynamic Attach path is still used automatically when the server permits it.
 
+When upgrading, stop the server and keep exactly one FoliaCarpet jar in `plugins`. Remove older files such as `folia-carpet-1.4.194-folia.2.jar` and any duplicate `folia-carpet.jar`; otherwise Folia reports an ambiguous plugin name and may load the wrong classes. If the server created a `plugins/.paper-remapped` cache for the old jar, remove that cache before the first start with `.3`.
+
 Use one copy of FoliaCarpet per server. Back up the world before enabling rules that change redstone, TNT, block movement or other game mechanics.
 
 ## Installation
