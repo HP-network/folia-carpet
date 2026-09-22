@@ -1,5 +1,6 @@
 package carpet.folia;
 
+import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 
 /** Attaches the plugin agent from a short-lived JVM when self-attach is disabled. */
@@ -11,7 +12,16 @@ public final class FoliaCarpetAttacher
         {
             throw new IllegalArgumentException("Usage: FoliaCarpetAttacher <pid> <agent-jar> <plugin-jar>");
         }
-        VirtualMachine vm = VirtualMachine.attach(args[0]);
+        VirtualMachine vm;
+        try
+        {
+            vm = VirtualMachine.attach(args[0]);
+        }
+        catch (AttachNotSupportedException | java.io.IOException error)
+        {
+            System.err.println("Unable to attach to target JVM " + args[0] + ": " + error);
+            throw error;
+        }
         try
         {
             vm.loadAgent(args[1], args[2]);

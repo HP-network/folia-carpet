@@ -18,7 +18,7 @@ The plugin keeps Carpet's command and rule model while routing world, entity and
 ## Compatibility
 
 - Folia 1.21.11
-- Java 21
+- Java 21 JDK (a JRE or stripped runtime is not enough for JVM instrumentation)
 - Server plugin only; clients do not need Fabric, Quilt or a separate mod
 - Not compatible with ordinary Paper, Spigot, Fabric or Quilt servers
 
@@ -99,7 +99,7 @@ Bundled language packs: English, Simplified Chinese, Traditional Chinese, French
 
 ## Build from source
 
-The build needs Java 21 and a Folia 1.21.11 server jar. If the server jar is not already present, fetch and build it first:
+The build needs a Java 21 JDK and a Folia 1.21.11 server jar. If the server jar is not already present, fetch and build it first:
 
 ```bash
 ./scripts/fetch-folia-server.sh

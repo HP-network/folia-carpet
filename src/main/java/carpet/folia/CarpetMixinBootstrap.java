@@ -96,21 +96,25 @@ public final class CarpetMixinBootstrap {
                 vm.detach();
             }
         }
-        catch (java.io.IOException selfAttachFailure)
+        catch (Exception selfAttachFailure)
         {
-            Path java = Path.of(System.getProperty("java.home"), "bin", "java");
+            String executable = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")
+                    ? "java.exe" : "java";
+            Path java = Path.of(System.getProperty("java.home"), "bin", executable);
             Process helper = new ProcessBuilder(
                     java.toString(),
+                    "--add-modules", "jdk.attach",
                     "-cp", pluginJar.toString(),
                     FoliaCarpetAttacher.class.getName(),
                     pid,
                     agentJar.toString(),
                     supportJar.toString())
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .start();
             if (helper.waitFor() != 0)
             {
-                throw new java.io.IOException("External agent attach failed", selfAttachFailure);
+                throw new java.io.IOException("External agent attach failed using " + java, selfAttachFailure);
             }
         }
     }

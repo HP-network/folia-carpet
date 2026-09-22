@@ -18,7 +18,7 @@ FoliaCarpet 是将 Carpet 1.4.194 运行时适配到 Folia 1.21.11 的服务端�
 ## 兼容性
 
 - Folia 1.21.11
-- Java 21
+- Java 21 完整 JDK（精简 JRE 或裁剪运行时无法完成 JVM 插桩）
 - 仅服务端插件，客户端不需要安装 Fabric、Quilt 或其他模组
 - 不兼容普通 Paper、Spigot、Fabric 或 Quilt 服务端
 
@@ -99,7 +99,7 @@ FoliaCarpet 是将 Carpet 1.4.194 运行时适配到 Folia 1.21.11 的服务端�
 
 ## 从源码构建
 
-构建需要 Java 21 和 Folia 1.21.11 服务端 jar。如果本地还没有服务端 jar，先执行：
+构建需要 Java 21 完整 JDK 和 Folia 1.21.11 服务端 jar。如果本地还没有服务端 jar，先执行：
 
 ```bash
 ./scripts/fetch-folia-server.sh
