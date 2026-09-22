@@ -25,13 +25,13 @@ FoliaCarpet 是将 Carpet 1.4.194 运行时适配到 Folia 1.21.11 的服务端�
 如果面板或 JVM 报 `Can't attach to this VM`，需要在服务端启动参数中预加载插件。把下面参数放在 `-jar` 前，或者填入面板的 JVM 参数：
 
 ```text
--javaagent:plugins/folia-carpet-1.4.194-folia.2.jar
+-javaagent:plugins/folia-carpet-1.4.194-folia.3.jar
 ```
 
 Windows 启动示例：
 
 ```bat
-java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar --nogui
+java -javaagent:plugins/folia-carpet-1.4.194-folia.3.jar -jar folia-server.jar --nogui
 ```
 
 服务器允许动态 Attach 时，插件仍会自动使用动态方式。
@@ -41,7 +41,7 @@ java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar -
 ## 安装
 
 1. 停止 Folia 服务端。
-2. 从 [Releases](https://github.com/HP-network/folia-carpet/releases) 下载 `folia-carpet-1.4.194-folia.2.jar`。
+2. 从 [Releases](https://github.com/HP-network/folia-carpet/releases) 下载 `folia-carpet-1.4.194-folia.3.jar`。
 3. 将 jar 放入服务端的 `plugins` 目录。
 4. 启动服务端，确认启动日志中出现 `Carpet Folia initialized` 和 `Carpet Folia enabled`。
 5. 以管理员身份或在控制台执行 `/carpet list`。
@@ -123,7 +123,7 @@ java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar -
 插件产物位置：
 
 ```text
-build/libs/folia-carpet-1.4.194-folia.2.jar
+build/libs/folia-carpet-1.4.194-folia.3.jar
 ```
 
 需要使用其他本地服务端 jar 时，在执行 Gradle 前设置 `FOLIA_SERVER_JAR`。

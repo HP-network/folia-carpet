@@ -1,5 +1,5 @@
 name: FoliaCarpet
-version: '1.4.194-folia.2'
+version: '1.4.194-folia.3'
 main: carpet.folia.CarpetFoliaPlugin
 bootstrapper: carpet.folia.CarpetFoliaBootstrap
 api-version: '1.21.11'

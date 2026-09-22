@@ -25,13 +25,13 @@ The plugin keeps Carpet's command and rule model while routing world, entity and
 If the hosting panel or JVM reports `Can't attach to this VM`, add the plugin as a startup agent. Put this option before `-jar` (or in the panel's JVM arguments):
 
 ```text
--javaagent:plugins/folia-carpet-1.4.194-folia.2.jar
+-javaagent:plugins/folia-carpet-1.4.194-folia.3.jar
 ```
 
 For example on Windows:
 
 ```bat
-java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar --nogui
+java -javaagent:plugins/folia-carpet-1.4.194-folia.3.jar -jar folia-server.jar --nogui
 ```
 
 The dynamic Attach path is still used automatically when the server permits it.
@@ -41,7 +41,7 @@ Use one copy of FoliaCarpet per server. Back up the world before enabling rules 
 ## Installation
 
 1. Stop the Folia server.
-2. Download `folia-carpet-1.4.194-folia.2.jar` from [Releases](https://github.com/HP-network/folia-carpet/releases).
+2. Download `folia-carpet-1.4.194-folia.3.jar` from [Releases](https://github.com/HP-network/folia-carpet/releases).
 3. Copy the jar into the server's `plugins` directory.
 4. Start the server and check the startup log for `Carpet Folia initialized` and `Carpet Folia enabled`.
 5. Run `/carpet list` as an operator or from the console.
@@ -123,7 +123,7 @@ The build needs a Java 21 JDK and a Folia 1.21.11 server jar. If the server jar 
 The plugin is written to:
 
 ```text
-build/libs/folia-carpet-1.4.194-folia.2.jar
+build/libs/folia-carpet-1.4.194-folia.3.jar
 ```
 
 To use a different local server jar, set `FOLIA_SERVER_JAR` before running Gradle.
