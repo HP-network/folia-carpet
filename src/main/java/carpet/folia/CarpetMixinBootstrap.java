@@ -10,6 +10,7 @@ import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 import com.sun.tools.attach.VirtualMachine;
 
 import java.io.InputStream;
+import java.lang.instrument.Instrumentation;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -25,9 +26,13 @@ public final class CarpetMixinBootstrap {
         initialized = true;
         try {
             System.setProperty("mixin.hotSwap", "true");
+            Instrumentation premain = findPremainInstrumentation();
             // Put the shared Mixin classes on the server loader before any of
             // their types are resolved by the plugin bootstrap class.
-            attachAgent();
+            if (premain == null)
+            {
+                attachAgent();
+            }
             MixinBootstrap.init();
             MixinEnvironment.getDefaultEnvironment().setSide(MixinEnvironment.Side.SERVER);
             advanceToDefaultPhase();
@@ -35,10 +40,32 @@ public final class CarpetMixinBootstrap {
             Mixins.addConfiguration("carpet.mixins.json", null);
             // Keep the bridge visible to the agent class loader before attachment.
             Class.forName("carpet.folia.CarpetMixinBridge");
-            attachAgent();
+            if (premain == null)
+            {
+                attachAgent();
+            }
+            else
+            {
+                CarpetMixinBridge.install(premain);
+            }
             MixinExtrasBootstrap.init();
         } catch (Throwable t) {
             throw new RuntimeException("Failed to initialize carpet mixins", t);
+        }
+    }
+
+    private static Instrumentation findPremainInstrumentation()
+    {
+        try
+        {
+            Class<?> agent = Class.forName(
+                    "carpet.folia.FoliaCarpetAgent", false, ClassLoader.getSystemClassLoader());
+            Object value = agent.getMethod("getPremainInstrumentation").invoke(null);
+            return value instanceof Instrumentation instrumentation ? instrumentation : null;
+        }
+        catch (Throwable ignored)
+        {
+            return null;
         }
     }
 

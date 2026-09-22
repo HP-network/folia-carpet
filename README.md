@@ -22,6 +22,20 @@ The plugin keeps Carpet's command and rule model while routing world, entity and
 - Server plugin only; clients do not need Fabric, Quilt or a separate mod
 - Not compatible with ordinary Paper, Spigot, Fabric or Quilt servers
 
+If the hosting panel or JVM reports `Can't attach to this VM`, add the plugin as a startup agent. Put this option before `-jar` (or in the panel's JVM arguments):
+
+```text
+-javaagent:plugins/folia-carpet-1.4.194-folia.2.jar
+```
+
+For example on Windows:
+
+```bat
+java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar --nogui
+```
+
+The dynamic Attach path is still used automatically when the server permits it.
+
 Use one copy of FoliaCarpet per server. Back up the world before enabling rules that change redstone, TNT, block movement or other game mechanics.
 
 ## Installation

@@ -84,6 +84,7 @@ jar {
             'Implementation-Version': project.version,
             'MixinConfigs': 'carpet.mixins.json',
             'Agent-Class': 'carpet.folia.FoliaCarpetAgent',
+            'Premain-Class': 'carpet.folia.FoliaCarpetAgent',
             'Can-Redefine-Classes': 'true',
             'Can-Retransform-Classes': 'true',
         )

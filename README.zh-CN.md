@@ -22,6 +22,20 @@ FoliaCarpet 是将 Carpet 1.4.194 运行时适配到 Folia 1.21.11 的服务端�
 - 仅服务端插件，客户端不需要安装 Fabric、Quilt 或其他模组
 - 不兼容普通 Paper、Spigot、Fabric 或 Quilt 服务端
 
+如果面板或 JVM 报 `Can't attach to this VM`，需要在服务端启动参数中预加载插件。把下面参数放在 `-jar` 前，或者填入面板的 JVM 参数：
+
+```text
+-javaagent:plugins/folia-carpet-1.4.194-folia.2.jar
+```
+
+Windows 启动示例：
+
+```bat
+java -javaagent:plugins/folia-carpet-1.4.194-folia.2.jar -jar folia-server.jar --nogui
+```
+
+服务器允许动态 Attach 时，插件仍会自动使用动态方式。
+
 每个服务端只放一份 FoliaCarpet。启用会改变红石、TNT、方块移动或其他游戏机制的规则前，请先备份世界。
 
 ## 安装
